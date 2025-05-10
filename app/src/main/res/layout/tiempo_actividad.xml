@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#33ff86">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Icono -->
+        <ImageView
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_gravity="center"
+            android:src="@drawable/reloj"
+            android:contentDescription="Icono tiempo de inactividad"
+            android:background="#3F51B5" />
+
+        <!-- Título -->
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tiempo de Actividad"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#3F51B5"
+            android:layout_gravity="center"
+            android:layout_marginTop="16dp" />
+
+        <!-- Descripción -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Define el tiempo que se le va otorgar al hijo para que siga usando su telefono movil."
+            android:textColor="@android:color/black"
+            android:textStyle="italic|bold"
+            android:layout_marginTop="12dp"
+            android:textSize="20sp" />
+
+        <!-- Horas -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="24dp">
+
+            <TextView
+                android:text="Inicio"
+                android:textColor="@android:color/black"
+                android:textStyle="italic|bold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/startTime"
+                android:text="07:00"
+                android:textColor="@android:color/black"
+                android:textSize="20sp"
+                android:textStyle="italic|bold"
+                android:layout_marginBottom="16dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:text="Finalizar"
+                android:textColor="@android:color/black"
+                android:textStyle="italic|bold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/endTime"
+                android:text="17:00"
+                android:textColor="@android:color/black"
+                android:textSize="20sp"
+                android:textStyle="italic|bold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- Botón -->
+        <Button
+            android:id="@+id/setDowntimeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Definir tiempo de Actividad"
+            android:backgroundTint="#007AFF"
+            android:textColor="@android:color/white"
+            android:layout_marginTop="32dp" />
+
+        <!-- Opción "Ahora no" -->
+        <TextView
+            android:id="@+id/laterText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ahora no"
+            android:textColor="#007AFF"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+</ScrollView>

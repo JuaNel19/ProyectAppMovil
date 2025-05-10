@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:background="#121212"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    tools:context=".MainActivity">
+
+
+
+    <ImageView
+        android:id="@+id/lockIcon"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@drawable/candado"
+        android:contentDescription="Candado" />
+
+    <TextView
+        android:id="@+id/textTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ha llegado el momento de descansar"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textAlignment="center"
+        android:gravity="center"
+        android:layout_marginTop="24dp" />
+
+    <TextView
+        android:id="@+id/textSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tu padre, madre o tutor/a han bloqueado este dispositivo"
+        android:textColor="#BBBBBB"
+        android:textSize="14sp"
+        android:layout_marginTop="12dp"
+        android:textAlignment="center"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="48dp">
+
+
+
+
+
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:text="Pedir mas tiempo"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="48dp"
+        android:gravity="center"
+        android:layout_gravity="center"
+        android:backgroundTint="@color/black"
+        />
+</LinearLayout>
