@@ -48,7 +48,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
-    implementation ("com.google.zxing:core:3.5.2")
+    implementation(libs.firebase.bom)
+    implementation (libs.core)
     implementation ("com.journeyapps:zxing-android-embedded:4.3.0")
 }
