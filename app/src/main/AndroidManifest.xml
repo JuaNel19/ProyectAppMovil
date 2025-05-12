@@ -26,6 +26,9 @@
 
         <activity android:name=".MainActivity2" />
         <activity android:name=".TiempoActividad" />
+        <activity android:name=".MenuTutorActivity" />
+        <activity android:name=".ScanQRActivity" />
+        <activity android:name=".GenerateQRActivity" />
     </application>
 
 </manifest>

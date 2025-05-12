@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">Proyectito</string>
+    <string name="app_name">Control Parental</string>
+    <string name="navigation_drawer_open">Abrir navegación</string>
+    <string name="navigation_drawer_close">Cerrar navegación</string>
 </resources>

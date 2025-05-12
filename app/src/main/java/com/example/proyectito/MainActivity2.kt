@@ -69,7 +69,7 @@ class MainActivity2 : AppCompatActivity() {
                             .set(user)
                             .addOnSuccessListener {
                                 Toast.makeText(this, "Registro exitoso", Toast.LENGTH_SHORT).show()
-                                startActivity(Intent(this, TiempoActividad::class.java))
+                                startActivity(Intent(this, MenuTutorActivity::class.java))
                                 finish()
                             }
                             .addOnFailureListener { e ->

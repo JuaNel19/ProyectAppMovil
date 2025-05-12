@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_tiempo_uso"
+        android:icon="@android:drawable/ic_menu_recent_history"
+        android:title="Tiempo de Uso" />
+    <item
+        android:id="@+id/nav_control"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Control" />
+    <item
+        android:id="@+id/nav_ubicacion"
+        android:icon="@android:drawable/ic_menu_mylocation"
+        android:title="Ubicación" />
+</menu>

@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             //Saltar logeo para probar demas pantallas descomentar la linea loginUser al terminar
-            startActivity(Intent(this, TiempoActividad::class.java))
+            startActivity(Intent(this, MenuTutorActivity::class.java))
 
             //loginUser(email, password)
         }
@@ -51,7 +51,7 @@ class MainActivity : AppCompatActivity() {
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
                     // Login successful
-                    startActivity(Intent(this, TiempoActividad::class.java))
+                    startActivity(Intent(this, MenuTutorActivity::class.java))
                     finish()
                 } else {
                     // Login failed
