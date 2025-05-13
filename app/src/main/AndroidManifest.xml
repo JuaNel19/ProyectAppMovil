@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
 
     <application
         android:allowBackup="true"
@@ -16,7 +19,7 @@
         tools:targetApi="31">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".RoleSelectionActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -24,11 +27,14 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".MainActivity"/>
         <activity android:name=".MainActivity2" />
         <activity android:name=".TiempoActividad" />
         <activity android:name=".MenuTutorActivity" />
-        <activity android:name=".ScanQRActivity" />
-        <activity android:name=".GenerateQRActivity" />
+        <activity android:name=".PantallaHijoActivity" />
+        <activity android:name=".GenerarCodigoQRActivity" />
+        <activity android:name=".EditarTiempoActivity" />
+        <activity android:name=".EscanearCodigoQRActivity" />
     </application>
 
 </manifest>

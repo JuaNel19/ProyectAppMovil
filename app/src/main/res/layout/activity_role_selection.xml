@@ -6,79 +6,32 @@
     android:background="#F3F6FB"
     android:padding="16dp">
 
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/cardTimeUsed"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="4dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#FFFFFF"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="24dp">
-
-            <ImageView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_recent_history"
-                app:tint="#4F8FC0" />
-
-            <TextView
-                android:id="@+id/tvTimeUsed"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Tiempo usado hoy: 2h 30min"
-                android:textColor="#2F3E4E"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <com.google.android.material.progressindicator.CircularProgressIndicator
-        android:id="@+id/progressIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:progress="63"
-        app:indicatorColor="#4F8FC0"
-        app:trackColor="#E0E0E0"
-        app:trackThickness="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cardTimeUsed" />
-
     <TextView
-        android:id="@+id/tvProgressText"
+        android:id="@+id/tvWelcome"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="63% del tiempo permitido"
-        android:textColor="#4F8FC0"
-        android:textSize="16sp"
+        android:text="Bienvenido a Control Parental"
+        android:textColor="#2F3E4E"
+        android:textSize="22sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/progressIndicator" />
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="48dp" />
 
     <com.google.android.material.card.MaterialCardView
-        android:id="@+id/cardTimeAllowed"
+        android:id="@+id/cardParent"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="70dp"
+        android:clickable="true"
+        android:focusable="true"
         app:cardCornerRadius="12dp"
         app:cardElevation="4dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvProgressText">
+        app:layout_constraintTop_toBottomOf="@id/tvWelcome"
+        app:layout_constraintWidth_percent="0.8">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -89,36 +42,59 @@
             android:padding="24dp">
 
             <ImageView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_today"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@android:drawable/ic_menu_myplaces"
                 app:tint="#4F8FC0" />
 
             <TextView
-                android:id="@+id/tvTimeAllowed"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Tiempo permitido: 4h"
+                android:text="Padre"
                 android:textColor="#2F3E4E"
                 android:textSize="20sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnEditTime"
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardChild"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:padding="12dp"
-        android:text="Editar tiempo permitido"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        app:backgroundTint="#4F8FC0"
-        app:cornerRadius="8dp"
+        android:layout_marginTop="70dp"
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cardTimeAllowed" />
+        app:layout_constraintTop_toBottomOf="@id/cardParent"
+        app:layout_constraintWidth_percent="0.8">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@android:drawable/ic_menu_myplaces"
+                app:tint="#4F8FC0" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Hijo"
+                android:textColor="#2F3E4E"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             //Saltar logeo para probar demas pantallas descomentar la linea loginUser al terminar
-            startActivity(Intent(this, MenuTutorActivity::class.java))
+            navigateBasedOnRole()
 
             //loginUser(email, password)
         }
@@ -51,7 +51,7 @@ class MainActivity : AppCompatActivity() {
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
                     // Login successful
-                    startActivity(Intent(this, MenuTutorActivity::class.java))
+                    navigateBasedOnRole()
                     finish()
                 } else {
                     // Login failed
@@ -59,5 +59,21 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_SHORT).show()
                 }
             }
+    }
+
+    private fun navigateBasedOnRole() {
+        val role = getSharedPreferences("app_preferences", MODE_PRIVATE)
+            .getString("rol_usuario", null)
+
+        val intent = when (role) {
+            "padre" -> Intent(this, MenuTutorActivity::class.java)
+            "hijo" -> Intent(this, PantallaHijoActivity::class.java)
+            else -> {
+                Toast.makeText(this, "Error: Rol no definido", Toast.LENGTH_SHORT).show()
+                Intent(this, RoleSelectionActivity::class.java)
+            }
+        }
+        startActivity(intent)
+        finish()
     }
 }

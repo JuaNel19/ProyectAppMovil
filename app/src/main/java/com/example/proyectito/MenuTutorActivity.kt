@@ -3,12 +3,12 @@ package com.example.proyectito
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
-import android.view.View
 import android.widget.TextView
-import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.fragment.app.Fragment
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.navigation.NavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -16,13 +16,12 @@ import com.google.firebase.firestore.FirebaseFirestore
 class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
     private lateinit var auth: FirebaseAuth
     private lateinit var db: FirebaseFirestore
-    private lateinit var toolbar: androidx.appcompat.widget.Toolbar
-    private lateinit var drawerLayout: androidx.drawerlayout.widget.DrawerLayout
-    private lateinit var navigationView: com.google.android.material.navigation.NavigationView
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navigationView: NavigationView
+    private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomNavigation: com.google.android.material.bottomnavigation.BottomNavigationView
     private lateinit var userEmail: TextView
     private lateinit var userName: TextView
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,32 +31,15 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
-        toolbar = findViewById(R.id.toolbar)
-        drawerLayout = findViewById(R.id.drawerLayout)
-        navigationView = findViewById(R.id.navigationView)
-        bottomNavigation = findViewById(R.id.bottomNavigation)
+        initializeViews()
+        setupToolbar()
+        setupNavigationDrawer()
+        loadUserData()
 
-
-        // Configurar Toolbar
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_profile)
-
-        // Configurar Navigation Drawer
-        val toggle = ActionBarDrawerToggle(
-            this,
-            drawerLayout,
-            toolbar,
-            R.string.navigation_drawer_open,
-            R.string.navigation_drawer_close
-        )
-        drawerLayout.addDrawerListener(toggle)
-        toggle.syncState()
-
-        navigationView.setNavigationItemSelectedListener(this)
-
-        // Cargar información del usuario
-        loadUserInfo()
+        // Cargar el fragmento inicial
+        if (savedInstanceState == null) {
+            loadFragment(TiempoUsoFragment())
+        }
 
         // Configurar Bottom Navigation
         bottomNavigation.setOnItemSelectedListener { item ->
@@ -83,7 +65,28 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         }
     }
 
-    private fun loadUserInfo() {
+    private fun initializeViews() {
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navigationView = findViewById(R.id.navView)
+        toolbar = findViewById(R.id.toolbar)
+        bottomNavigation = findViewById(R.id.bottomNavigation)
+    }
+
+    private fun setupToolbar() {
+        setSupportActionBar(toolbar)
+        toolbar.setNavigationOnClickListener {
+            drawerLayout.openDrawer(GravityCompat.START)
+        }
+    }
+
+    private fun setupNavigationDrawer() {
+        navigationView.setNavigationItemSelectedListener(this)
+    }
+
+    private fun loadUserData() {
+        val headerView = navigationView.getHeaderView(0)
+        val tvParentName = headerView.findViewById<TextView>(R.id.tvParentName)
+
         val currentUser = auth.currentUser
         currentUser?.let { user ->
             // Mostrar email en el header
@@ -101,26 +104,20 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         }
     }
 
-    override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.nav_add_child -> {
-                // Abrir actividad de escaneo QR
-                startActivity(Intent(this, ScanQRActivity::class.java))
-            }
-            R.id.nav_generate_code -> {
-                // Abrir actividad de generación de código QR
-                startActivity(Intent(this, GenerateQRActivity::class.java))
-            }
-        }
-
-        drawerLayout.closeDrawer(GravityCompat.START)
-        return true
-    }
-
     private fun loadFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragmentContainer, fragment)
             .commit()
+    }
+
+    override fun onNavigationItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.nav_scan_qr -> {
+                startActivity(Intent(this, EscanearCodigoQRActivity::class.java))
+            }
+        }
+        drawerLayout.closeDrawer(GravityCompat.START)
+        return true
     }
 
     override fun onBackPressed() {

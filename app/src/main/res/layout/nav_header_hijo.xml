@@ -16,11 +16,11 @@
         app:tint="#FFFFFF" />
 
     <TextView
-        android:id="@+id/tvParentName"
+        android:id="@+id/tvChildName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Hola, Carlos"
+        android:text="Hola, Matías"
         android:textAppearance="@style/TextAppearance.AppCompat.Body1"
         android:textColor="#FFFFFF"
         android:textSize="18sp" />
