@@ -5,5 +5,10 @@
             android:id="@+id/nav_scan_qr"
             android:icon="@android:drawable/ic_menu_camera"
             android:title="Leer código de vinculación" />
+
+        <item
+            android:id="@+id/nav_logout"
+            android:icon="@android:drawable/ic_menu_delete"
+            android:title="Cerrar Sesión" />
     </group>
 </menu>

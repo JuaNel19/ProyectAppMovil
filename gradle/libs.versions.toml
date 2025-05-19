@@ -5,6 +5,7 @@ cameraLifecycleVersion = "1.3.1"
 cameraxVersion = "1.3.1"
 core = "3.5.2"
 firebaseBom = "33.13.0"
+glide = "4.12.0"
 guava = "32.1.3-android"
 kotlin = "2.0.21"
 coreKtx = "1.15.0"
@@ -20,6 +21,8 @@ firebaseFirestoreKtx = "25.1.4"
 zxingAndroidEmbedded = "4.3.0"
 playServicesMlkitBarcodeScanning = "18.3.1"
 cameraLifecycle = "1.4.2"
+playServicesMaps = "19.2.0"
+playServicesLocation = "21.3.0"
 
 [libraries]
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraxVersion" }
@@ -28,8 +31,10 @@ androidx-camera-lifecycle-v131 = { module = "androidx.camera:camera-lifecycle", 
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "cameraLifecycleVersion" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
+compiler = { module = "com.github.bumptech.glide:compiler", version.ref = "glide" }
 core = { module = "com.google.zxing:core", version.ref = "core" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -43,6 +48,8 @@ firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-fires
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 play-services-mlkit-barcode-scanning = { group = "com.google.android.gms", name = "play-services-mlkit-barcode-scanning", version.ref = "playServicesMlkitBarcodeScanning" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
+play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

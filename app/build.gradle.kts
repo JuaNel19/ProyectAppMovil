@@ -47,6 +47,8 @@ dependencies {
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.play.services.maps)
+    implementation(libs.play.services.location)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -60,4 +62,6 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.barcode.scanning)
     implementation(libs.guava)
+    implementation (libs.glide)
+    annotationProcessor (libs.compiler)
 }

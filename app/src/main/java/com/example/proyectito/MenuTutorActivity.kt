@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
@@ -12,6 +13,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.navigation.NavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 
 class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
     private lateinit var auth: FirebaseAuth
@@ -22,6 +24,8 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var bottomNavigation: com.google.android.material.bottomnavigation.BottomNavigationView
     private lateinit var userEmail: TextView
     private lateinit var userName: TextView
+    private var alertsListener: ListenerRegistration? = null
+    private var childrenListener: ListenerRegistration? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +39,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         setupToolbar()
         setupNavigationDrawer()
         loadUserData()
+        setupFirestoreListeners()
 
         // Cargar el fragmento inicial
         if (savedInstanceState == null) {
@@ -49,11 +54,11 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                     true
                 }
                 R.id.nav_control -> {
-                    // Cargar fragmento de control
+                    loadFragment(ControlFragment())
                     true
                 }
                 R.id.nav_ubicacion -> {
-                    // Cargar fragmento de ubicación
+                    loadFragment(UbicacionFragment())
                     true
                 }
                 else -> false
@@ -70,6 +75,8 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         navigationView = findViewById(R.id.navView)
         toolbar = findViewById(R.id.toolbar)
         bottomNavigation = findViewById(R.id.bottomNavigation)
+        //userEmail = findViewById(R.id.tvParentEmail)
+        userName = findViewById(R.id.tvParentName)
     }
 
     private fun setupToolbar() {
@@ -83,23 +90,73 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         navigationView.setNavigationItemSelectedListener(this)
     }
 
-    private fun loadUserData() {
-        val headerView = navigationView.getHeaderView(0)
-        val tvParentName = headerView.findViewById<TextView>(R.id.tvParentName)
+    private fun setupFirestoreListeners() {
+        val userId = auth.currentUser?.uid ?: return
 
+        // Listener para alertas
+        alertsListener = db.collection("alertas")
+            .whereEqualTo("parentId", userId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Toast.makeText(this, "Error al obtener alertas: ${e.message}", Toast.LENGTH_SHORT).show()
+                    return@addSnapshotListener
+                }
+
+                snapshot?.let { documents ->
+                    for (doc in documents) {
+                        val tipo = doc.getString("tipo")
+                        val mensaje = doc.getString("mensaje")
+                        val childId = doc.getString("childId")
+
+                        when (tipo) {
+                            "limite_alcanzado" -> {
+                                // Obtener nombre del hijo
+                                db.collection("hijos").document(childId ?: "")
+                                    .get()
+                                    .addOnSuccessListener { childDoc ->
+                                        val childName = childDoc.getString("nombre") ?: "Tu hijo"
+                                        Toast.makeText(this, "$childName: $mensaje", Toast.LENGTH_LONG).show()
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+
+        // Listener para hijos asociados
+        childrenListener = db.collection("parent_child_relations")
+            .whereEqualTo("parent_id", userId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Toast.makeText(this, "Error al obtener hijos: ${e.message}", Toast.LENGTH_SHORT).show()
+                    return@addSnapshotListener
+                }
+
+                // Actualizar la lista de hijos en el fragmento actual
+                val currentFragment = supportFragmentManager.findFragmentById(R.id.fragmentContainer)
+                if (currentFragment is TiempoUsoFragment) {
+                    currentFragment.updateChildrenList(snapshot?.documents?.mapNotNull { it.getString("child_id") } ?: emptyList())
+                }
+            }
+    }
+
+    private fun loadUserData() {
         val currentUser = auth.currentUser
         currentUser?.let { user ->
             // Mostrar email en el header
-            userEmail.text = user.email
+            //userEmail.text = user.email
 
-            // Obtener nombre del usuario desde Firestore
-            db.collection("users").document(user.uid)
+            // Obtener datos del tutor desde Firestore
+            db.collection("tutores").document(user.uid)
                 .get()
                 .addOnSuccessListener { document ->
                     if (document != null && document.exists()) {
-                        val name = document.getString("name") ?: "Usuario"
+                        val name = document.getString("nombre") ?: "Tutor"
                         userName.text = name
                     }
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Error al cargar datos: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -115,6 +172,11 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             R.id.nav_scan_qr -> {
                 startActivity(Intent(this, EscanearCodigoQRActivity::class.java))
             }
+            R.id.nav_logout -> {
+                auth.signOut()
+                startActivity(Intent(this, LoginActivity::class.java))
+                finish()
+            }
         }
         drawerLayout.closeDrawer(GravityCompat.START)
         return true
@@ -126,5 +188,11 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         } else {
             super.onBackPressed()
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        alertsListener?.remove()
+        childrenListener?.remove()
     }
 }
