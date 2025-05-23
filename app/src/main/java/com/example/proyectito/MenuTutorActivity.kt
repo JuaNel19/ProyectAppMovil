@@ -22,7 +22,6 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var navigationView: NavigationView
     private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomNavigation: com.google.android.material.bottomnavigation.BottomNavigationView
-    private lateinit var userEmail: TextView
     private lateinit var userName: TextView
     private var alertsListener: ListenerRegistration? = null
     private var childrenListener: ListenerRegistration? = null
@@ -38,7 +37,6 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         initializeViews()
         setupToolbar()
         setupNavigationDrawer()
-        loadUserData()
         setupFirestoreListeners()
 
         // Cargar el fragmento inicial
@@ -68,6 +66,8 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         if (savedInstanceState == null) {
             bottomNavigation.selectedItemId = R.id.nav_tiempo_uso
         }
+
+        loadUserData()
     }
 
     private fun initializeViews() {
@@ -75,8 +75,10 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         navigationView = findViewById(R.id.navView)
         toolbar = findViewById(R.id.toolbar)
         bottomNavigation = findViewById(R.id.bottomNavigation)
-        //userEmail = findViewById(R.id.tvParentEmail)
-        userName = findViewById(R.id.tvParentName)
+
+        // Inicializar las variables del header
+        val headerView = navigationView.getHeaderView(0)
+        userName = headerView.findViewById(R.id.nav_header_name)
     }
 
     private fun setupToolbar() {
@@ -143,8 +145,6 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private fun loadUserData() {
         val currentUser = auth.currentUser
         currentUser?.let { user ->
-            // Mostrar email en el header
-            //userEmail.text = user.email
 
             // Obtener datos del tutor desde Firestore
             db.collection("tutores").document(user.uid)

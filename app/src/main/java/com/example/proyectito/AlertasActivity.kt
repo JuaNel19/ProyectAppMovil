@@ -3,7 +3,9 @@ package com.example.proyectito
 import android.app.TimePickerDialog
 import android.os.Bundle
 import android.view.View
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,11 +17,14 @@ import com.google.firebase.firestore.Query
 import java.util.*
 
 class AlertasActivity : AppCompatActivity() {
+    private lateinit var toolbar: MaterialToolbar
     private lateinit var recyclerView: RecyclerView
-    private lateinit var tvNoAlertas: TextView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var tvEmpty: TextView
     private lateinit var adapter: AlertaAdapter
     private lateinit var db: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
+    private var childId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,50 +34,106 @@ class AlertasActivity : AppCompatActivity() {
         db = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
 
-        // Configurar toolbar
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        // Obtener childId del intent
+        childId = intent.getStringExtra("childId")
+        if (childId == null) {
+            Toast.makeText(this, "Error: No se especificó el niño", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+        initializeViews()
+        setupToolbar()
+        setupRecyclerView()
+        loadChildInfo()
+        loadAlertas()
+    }
+
+    private fun initializeViews() {
+        toolbar = findViewById(R.id.toolbar)
+        recyclerView = findViewById(R.id.recyclerApps)
+        progressBar = findViewById(R.id.progressBar)
+        tvEmpty = findViewById(R.id.tvEmpty)
+    }
+
+    private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { onBackPressed() }
+    }
 
-        // Inicializar vistas
-        recyclerView = findViewById(R.id.recyclerAlertas)
-        tvNoAlertas = findViewById(R.id.tvNoAlertas)
-
-        // Configurar RecyclerView
-        adapter = AlertaAdapter(emptyList()) { alerta ->
+    private fun setupRecyclerView() {
+        adapter = AlertaAdapter { alerta ->
             when (alerta.tipo) {
                 Alerta.TIPO_SOLICITUD_TIEMPO -> showTimePickerDialog(alerta)
                 Alerta.TIPO_DESBLOQUEO -> showDesbloqueoDialog(alerta)
                 else -> showInfoDialog(alerta)
             }
         }
-
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
-
-        // Cargar alertas
-        cargarAlertas()
     }
 
-    private fun cargarAlertas() {
-        val userId = auth.currentUser?.uid ?: return
-
-        db.collection("alertas")
-            .whereEqualTo("parentId", userId)
-            .orderBy("fecha", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    return@addSnapshotListener
+    private fun loadChildInfo() {
+        childId?.let { id ->
+            db.collection("children")
+                .document(id)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        val childName = document.getString("name") ?: "Niño"
+                        toolbar.title = "Alertas - $childName"
+                    }
                 }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Error al cargar información del niño", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
 
-                val alertas = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(Alerta::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
+    private fun loadAlertas() {
+        progressBar.visibility = View.VISIBLE
+        recyclerView.visibility = View.GONE
+        tvEmpty.visibility = View.GONE
 
-                adapter.updateAlertas(alertas)
-                tvNoAlertas.visibility = if (alertas.isEmpty()) View.VISIBLE else View.GONE
-            }
+        childId?.let { id ->
+            db.collection("children")
+                .document(id)
+                .collection("alerts")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    progressBar.visibility = View.GONE
+
+                    if (error != null) {
+                        Toast.makeText(this, "Error al cargar alertas: ${error.message}", Toast.LENGTH_SHORT).show()
+                        return@addSnapshotListener
+                    }
+
+                    val alertas = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            Alerta(
+                                id = doc.id,
+                                tipo = doc.getString("type") ?: "",
+                                mensaje = doc.getString("message") ?: "",
+                                estado = doc.getString("status") ?: Alerta.ESTADO_PENDIENTE,
+                                fecha = doc.getTimestamp("timestamp") ?: com.google.firebase.Timestamp.now(),
+                                tiempoAprobado = doc.getLong("approvedTime")?.toInt() ?: 0
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } ?: emptyList()
+
+                    if (alertas.isEmpty()) {
+                        tvEmpty.visibility = View.VISIBLE
+                        recyclerView.visibility = View.GONE
+                    } else {
+                        tvEmpty.visibility = View.GONE
+                        recyclerView.visibility = View.VISIBLE
+                        adapter.submitList(alertas)
+                    }
+                }
+        }
     }
 
     private fun showTimePickerDialog(alerta: Alerta) {
@@ -84,7 +145,7 @@ class AlertasActivity : AppCompatActivity() {
             this,
             { _, selectedHour, selectedMinute ->
                 val minutos = selectedHour * 60 + selectedMinute
-                actualizarEstadoAlerta(alerta, Alerta.ESTADO_APROBADO, minutos)
+                updateAlertStatus(alerta, Alerta.ESTADO_APROBADO, minutos)
             },
             hour,
             minute,
@@ -97,10 +158,10 @@ class AlertasActivity : AppCompatActivity() {
             .setTitle("Solicitud de desbloqueo")
             .setMessage(alerta.mensaje)
             .setPositiveButton("Aprobar") { _, _ ->
-                actualizarEstadoAlerta(alerta, Alerta.ESTADO_APROBADO)
+                updateAlertStatus(alerta, Alerta.ESTADO_APROBADO)
             }
             .setNegativeButton("Denegar") { _, _ ->
-                actualizarEstadoAlerta(alerta, Alerta.ESTADO_DENEGADO)
+                updateAlertStatus(alerta, Alerta.ESTADO_DENEGADO)
             }
             .setNeutralButton("Cancelar", null)
             .show()
@@ -118,19 +179,36 @@ class AlertasActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun actualizarEstadoAlerta(alerta: Alerta, nuevoEstado: String, tiempoAprobado: Int = 0) {
-        val updates = hashMapOf<String, Any>(
-            "estado" to nuevoEstado
-        )
+    private fun updateAlertStatus(alerta: Alerta, nuevoEstado: String, tiempoAprobado: Int = 0) {
+        childId?.let { id ->
+            val updates = hashMapOf<String, Any>(
+                "status" to nuevoEstado,
+                "lastUpdated" to com.google.firebase.Timestamp.now()
+            )
 
-        if (tiempoAprobado > 0) {
-            updates["tiempoAprobado"] = tiempoAprobado
-        }
-
-        db.collection("alertas").document(alerta.id)
-            .update(updates)
-            .addOnFailureListener { e ->
-                // Manejar error
+            if (tiempoAprobado > 0) {
+                updates["approvedTime"] = tiempoAprobado
             }
+
+            db.collection("children")
+                .document(id)
+                .collection("alerts")
+                .document(alerta.id)
+                .update(updates)
+                .addOnSuccessListener {
+                    Toast.makeText(
+                        this,
+                        when (nuevoEstado) {
+                            Alerta.ESTADO_APROBADO -> "Solicitud aprobada"
+                            Alerta.ESTADO_DENEGADO -> "Solicitud denegada"
+                            else -> "Estado actualizado"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Error al actualizar estado: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
     }
 } 

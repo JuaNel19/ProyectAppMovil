@@ -12,7 +12,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuthException
-import com.google.firebase.auth.ActionCodeSettings
 
 class RegisterActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -39,17 +38,19 @@ class RegisterActivity : AppCompatActivity() {
 
         // Set up register button click listener
         val registerButton = findViewById<Button>(R.id.registerButton)
+        val registerName = findViewById<EditText>(R.id.registerName)
         val registerEmail = findViewById<EditText>(R.id.registerEmail)
         val registerPassword = findViewById<EditText>(R.id.registerPassword)
         val confirmPassword = findViewById<EditText>(R.id.confirmPassword)
         val logginTextView = findViewById<TextView>(R.id.logginTextView)
 
         registerButton.setOnClickListener {
+            val name = registerName.text.toString().trim()
             val email = registerEmail.text.toString().trim()
             val password = registerPassword.text.toString().trim()
             val confirmPassword = confirmPassword.text.toString().trim()
 
-            if (email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+            if (name.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
                 Toast.makeText(this, "Por favor complete todos los campos", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -69,7 +70,7 @@ class RegisterActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            registerUser(email, password)
+            registerUser(name, email, password)
         }
 
         // Set up login text click listener
@@ -78,7 +79,7 @@ class RegisterActivity : AppCompatActivity() {
         }
     }
 
-    private fun registerUser(email: String, password: String) {
+    private fun registerUser(name: String, email: String, password: String) {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
@@ -86,7 +87,12 @@ class RegisterActivity : AppCompatActivity() {
                     val user = User(
                         id = userId ?: "",
                         email = email,
-                        tipo = selectedRole ?: "",
+                        nombre = name,
+                        tipo = when (selectedRole) {
+                            "padre" -> User.TIPO_TUTOR
+                            "hijo" -> User.TIPO_HIJO
+                            else -> User.TIPO_TUTOR
+                        },
                         fechaCreacion = Timestamp.now()
                     )
 

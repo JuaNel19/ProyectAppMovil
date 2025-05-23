@@ -5,15 +5,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
 import java.util.*
 
 class AlertaAdapter(
-    private var alertas: List<Alerta>,
     private val onAlertaClick: (Alerta) -> Unit
-) : RecyclerView.Adapter<AlertaAdapter.AlertaViewHolder>() {
+) : ListAdapter<Alerta, AlertaAdapter.AlertaViewHolder>(AlertaDiffCallback()) {
 
     class AlertaViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val ivTipoAlerta: ImageView = view.findViewById(R.id.ivTipoAlerta)
@@ -21,6 +22,55 @@ class AlertaAdapter(
         val tvMensaje: TextView = view.findViewById(R.id.tvMensaje)
         val tvFecha: TextView = view.findViewById(R.id.tvFecha)
         val ivEstado: ImageView = view.findViewById(R.id.ivEstado)
+
+        fun bind(alerta: Alerta, onAlertaClick: (Alerta) -> Unit) {
+            // Configurar tipo de alerta
+            when (alerta.tipo) {
+                Alerta.TIPO_INSTALACION -> {
+                    ivTipoAlerta.setImageResource(R.drawable.ic_install)
+                    tvTipoAlerta.text = "Instalación de app"
+                }
+                Alerta.TIPO_SOLICITUD_TIEMPO -> {
+                    ivTipoAlerta.setImageResource(R.drawable.ic_time)
+                    tvTipoAlerta.text = "Solicitud de tiempo"
+                }
+                Alerta.TIPO_DESBLOQUEO -> {
+                    ivTipoAlerta.setImageResource(android.R.drawable.ic_lock_lock)
+                    tvTipoAlerta.text = "Solicitud de desbloqueo"
+                }
+                Alerta.TIPO_USO_BLOQUEADO -> {
+                    ivTipoAlerta.setImageResource(R.drawable.ic_block)
+                    tvTipoAlerta.text = "Intento de uso bloqueado"
+                }
+            }
+
+            // Configurar estado
+            when (alerta.estado) {
+                Alerta.ESTADO_PENDIENTE -> {
+                    ivEstado.setImageResource(R.drawable.ic_pending)
+                }
+                Alerta.ESTADO_APROBADO -> {
+                    ivEstado.setImageResource(R.drawable.ic_approved)
+                }
+                Alerta.ESTADO_DENEGADO -> {
+                    ivEstado.setImageResource(R.drawable.ic_denied)
+                }
+            }
+
+            tvMensaje.text = alerta.mensaje
+            tvFecha.text = formatDate(alerta.fecha)
+
+            itemView.setOnClickListener { onAlertaClick(alerta) }
+        }
+
+        private fun formatDate(timestamp: Timestamp): String {
+            return try {
+                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                sdf.format(timestamp.toDate())
+            } catch (e: Exception) {
+                "Fecha no disponible"
+            }
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlertaViewHolder {
@@ -30,56 +80,16 @@ class AlertaAdapter(
     }
 
     override fun onBindViewHolder(holder: AlertaViewHolder, position: Int) {
-        val alerta = alertas[position]
+        holder.bind(getItem(position), onAlertaClick)
+    }
+}
 
-        // Configurar tipo de alerta
-        when (alerta.tipo) {
-            Alerta.TIPO_INSTALACION -> {
-                holder.ivTipoAlerta.setImageResource(android.R.drawable.ic_menu_upload)
-                holder.tvTipoAlerta.text = "Instalación de app"
-            }
-            Alerta.TIPO_SOLICITUD_TIEMPO -> {
-                holder.ivTipoAlerta.setImageResource(android.R.drawable.ic_menu_recent_history)
-                holder.tvTipoAlerta.text = "Solicitud de tiempo"
-            }
-            Alerta.TIPO_DESBLOQUEO -> {
-                holder.ivTipoAlerta.setImageResource(android.R.drawable.ic_menu_manage)
-                holder.tvTipoAlerta.text = "Solicitud de desbloqueo"
-            }
-            Alerta.TIPO_USO_BLOQUEADO -> {
-                holder.ivTipoAlerta.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-                holder.tvTipoAlerta.text = "Intento de uso bloqueado"
-            }
-        }
-
-        // Configurar estado
-        when (alerta.estado) {
-            Alerta.ESTADO_PENDIENTE -> {
-                holder.ivEstado.setImageResource(android.R.drawable.ic_popup_sync)
-            }
-            Alerta.ESTADO_APROBADO -> {
-                holder.ivEstado.setImageResource(android.R.drawable.ic_menu_send)
-            }
-            Alerta.ESTADO_DENEGADO -> {
-                holder.ivEstado.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-            }
-        }
-
-        holder.tvMensaje.text = alerta.mensaje
-        holder.tvFecha.text = formatDate(alerta.fecha)
-
-        holder.itemView.setOnClickListener { onAlertaClick(alerta) }
+private class AlertaDiffCallback : DiffUtil.ItemCallback<Alerta>() {
+    override fun areItemsTheSame(oldItem: Alerta, newItem: Alerta): Boolean {
+        return oldItem.id == newItem.id
     }
 
-    override fun getItemCount() = alertas.size
-
-    fun updateAlertas(newAlertas: List<Alerta>) {
-        alertas = newAlertas
-        notifyDataSetChanged()
-    }
-
-    private fun formatDate(timestamp: Timestamp): String {
-        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-        return sdf.format(timestamp.toDate())
+    override fun areContentsTheSame(oldItem: Alerta, newItem: Alerta): Boolean {
+        return oldItem == newItem
     }
 }

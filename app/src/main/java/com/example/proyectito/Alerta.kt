@@ -9,7 +9,8 @@ data class Alerta(
     val estado: String = "",
     val fecha: Timestamp = Timestamp.now(),
     val appId: String = "",
-    val tiempoSolicitado: Int = 0
+    val tiempoSolicitado: Int = 0,
+    val tiempoAprobado: Int = 0
 ) {
     companion object {
         const val TIPO_INSTALACION = "instalacion"

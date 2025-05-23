@@ -85,28 +85,34 @@ class LoginActivity : AppCompatActivity() {
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     // Es un tutor
+                    android.util.Log.d("LoginActivity", "Usuario encontrado en tutores")
                     navigateToRole("padre")
                 } else {
                     // Si no es tutor, buscar en la colección de hijos
+                    android.util.Log.d("LoginActivity", "Usuario no encontrado en tutores, buscando en hijos")
                     db.collection("hijos").document(userId)
                         .get()
                         .addOnSuccessListener { childDocument ->
                             if (childDocument.exists()) {
                                 // Es un hijo
+                                android.util.Log.d("LoginActivity", "Usuario encontrado en hijos")
                                 navigateToRole("hijo")
                             } else {
                                 // No se encontró en ninguna colección
+                                android.util.Log.e("LoginActivity", "Usuario no encontrado en ninguna colección")
                                 Toast.makeText(this, "Error: Usuario no encontrado en ninguna colección", Toast.LENGTH_SHORT).show()
                                 auth.signOut()
                             }
                         }
                         .addOnFailureListener { e ->
+                            android.util.Log.e("LoginActivity", "Error al buscar en hijos: ${e.message}")
                             Toast.makeText(this, "Error al verificar rol: ${e.message}", Toast.LENGTH_SHORT).show()
                             auth.signOut()
                         }
                 }
             }
             .addOnFailureListener { e ->
+                android.util.Log.e("LoginActivity", "Error al buscar en tutores: ${e.message}")
                 Toast.makeText(this, "Error al verificar rol: ${e.message}", Toast.LENGTH_SHORT).show()
                 auth.signOut()
             }
@@ -119,17 +125,24 @@ class LoginActivity : AppCompatActivity() {
             .putString("rol_usuario", role)
             .apply()
 
-        // Navegar a la actividad correspondiente
-        val intent = when (role) {
-            "padre" -> Intent(this, MenuTutorActivity::class.java)
-            "hijo" -> Intent(this, PantallaHijoActivity::class.java)
-            else -> {
-                Toast.makeText(this, "Error: Rol no válido", Toast.LENGTH_SHORT).show()
-                Intent(this, RoleSelectionActivity::class.java)
+        try {
+            // Navegar a la actividad correspondiente
+            val intent = when (role) {
+                "padre" -> Intent(this, MenuTutorActivity::class.java)
+                "hijo" -> Intent(this, PantallaHijoActivity::class.java)
+                else -> {
+                    Toast.makeText(this, "Error: Rol no válido", Toast.LENGTH_SHORT).show()
+                    Intent(this, RoleSelectionActivity::class.java)
+                }
             }
+            startActivity(intent)
+            finish()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error al navegar: ${e.message}", Toast.LENGTH_LONG).show()
+            // En caso de error, volver a la selección de rol
+            startActivity(Intent(this, RoleSelectionActivity::class.java))
+            finish()
         }
-        startActivity(intent)
-        finish()
     }
 
     private fun handleAuthError(e: Exception?) {
