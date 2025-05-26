@@ -103,17 +103,17 @@ class ControlFragment : Fragment() {
     private fun loadChildren() {
         val userId = auth.currentUser?.uid ?: return
 
-        db.collection("usuarios")
-            .document(userId)
+        db.collection("parent_child_relations")
+            .whereEqualTo("parent_id", userId)
             .get()
-            .addOnSuccessListener { document ->
-                val hijosAsociados = document.get("hijos_asociados") as? List<String> ?: emptyList()
-                if (hijosAsociados.isEmpty()) {
+            .addOnSuccessListener { documents ->
+                val childrenIds = documents.mapNotNull { it.getString("child_id") }
+                if (childrenIds.isEmpty()) {
                     updateCardsState(false)
                     return@addOnSuccessListener
                 }
 
-                loadChildrenInfo(hijosAsociados)
+                loadChildrenInfo(childrenIds)
             }
             .addOnFailureListener { e ->
                 Toast.makeText(requireContext(), "Error al cargar hijos: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -126,8 +126,7 @@ class ControlFragment : Fragment() {
         val tempList = mutableListOf<ChildInfo>()
 
         childrenIds.forEach { childId ->
-            db.collection("hijos")
-                .document(childId)
+            db.collection("hijos").document(childId)
                 .get()
                 .addOnSuccessListener { document ->
                     val name = document.getString("nombre") ?: "Hijo"

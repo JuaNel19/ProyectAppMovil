@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -35,26 +34,33 @@ import com.google.android.gms.tasks.OnTokenCanceledListener
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.concurrent.TimeUnit
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import android.location.LocationManager
+import android.util.Log
 
 class PantallaHijoActivity : AppCompatActivity() {
     private lateinit var tvUsedTime: TextView
     private lateinit var tvRemainingTime: TextView
-    private lateinit var tvCountdown: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var rvBlockedApps: RecyclerView
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navigationView: NavigationView
     private lateinit var toolbar: MaterialToolbar
-    private var countDownTimer: CountDownTimer? = null
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationManager: CustomLocationManager
     private lateinit var auth: FirebaseAuth
     private lateinit var db: FirebaseFirestore
     private val handler = Handler(Looper.getMainLooper())
     private var locationUpdateRunnable: Runnable? = null
-    private var usageListener: ListenerRegistration? = null
     private var limitsListener: ListenerRegistration? = null
+    private var dailyLimit: Long = 0
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val LOCATION_UPDATE_INTERVAL = 3 * 60 * 1000L // 3 minutos
+
+    private lateinit var localBroadcastManager: LocalBroadcastManager
+    private var timeUpdateReceiver: BroadcastReceiver? = null
 
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -62,11 +68,9 @@ class PantallaHijoActivity : AppCompatActivity() {
         when {
             permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                     permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> {
-                // Permisos concedidos, iniciar actualizaciones de ubicación
                 startLocationUpdates()
             }
             else -> {
-                // Permisos denegados
                 showPermissionDeniedDialog()
             }
         }
@@ -75,6 +79,11 @@ class PantallaHijoActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pantalla_hijo)
+
+        Log.d("PantallaHijoActivity", "onCreate iniciado")
+
+        // Iniciar servicios de monitoreo
+        DeviceMonitorService.startService(this)
 
         initializeViews()
         setupToolbar()
@@ -85,20 +94,51 @@ class PantallaHijoActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
-        // Inicializar FusedLocationProviderClient
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        // Inicializar LocationManager
+        locationManager = CustomLocationManager(this)
+        Log.d("PantallaHijoActivity", "LocationManager inicializado")
 
         // Verificar y solicitar permisos de ubicación
         checkLocationPermission()
 
-        // Iniciar listeners de Firestore
-        setupFirestoreListeners()
+        // Iniciar listener de límites
+        setupFirestoreListener()
+
+        // Configurar receptor de broadcasts
+        localBroadcastManager = LocalBroadcastManager.getInstance(this)
+        setupBroadcastReceiver()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("PantallaHijoActivity", "onResume")
+        if (locationManager.hasLocationPermission()) {
+            Log.d("PantallaHijoActivity", "Iniciando actualizaciones de ubicación")
+            startLocationUpdates()
+        } else {
+            Log.e("PantallaHijoActivity", "No hay permisos de ubicación")
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        locationManager.stopLocationUpdates()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopLocationUpdates()
+        limitsListener?.remove()
+        DeviceMonitorService.stopService(this)
+        timeUpdateReceiver?.let {
+            localBroadcastManager.unregisterReceiver(it)
+        }
+        locationManager.stopLocationUpdates()
     }
 
     private fun initializeViews() {
         tvUsedTime = findViewById(R.id.tvUsedTime)
         tvRemainingTime = findViewById(R.id.tvRemainingTime)
-        tvCountdown = findViewById(R.id.tvCountdown)
         progressBar = findViewById(R.id.progressBar)
         rvBlockedApps = findViewById(R.id.rvBlockedApps)
         drawerLayout = findViewById(R.id.drawerLayout)
@@ -121,11 +161,16 @@ class PantallaHijoActivity : AppCompatActivity() {
                     drawerLayout.closeDrawer(GravityCompat.START)
                     true
                 }
+                R.id.nav_logout -> {
+                    auth.signOut()
+                    startActivity(Intent(this, RoleSelectionActivity::class.java))
+                    finish()
+                    true
+                }
                 else -> false
             }
         }
 
-        // Update child's name in the header
         val headerView = navigationView.getHeaderView(0)
         val tvChildName = headerView.findViewById<TextView>(R.id.tvChildName)
         val currentUser = FirebaseAuth.getInstance().currentUser
@@ -135,159 +180,125 @@ class PantallaHijoActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         rvBlockedApps.layoutManager = LinearLayoutManager(this)
         // TODO: Implement adapter for blocked apps
-        // rvBlockedApps.adapter = BlockedAppsAdapter(getBlockedApps())
     }
 
-    private fun setupFirestoreListeners() {
+    private fun setupFirestoreListener() {
         val userId = auth.currentUser?.uid ?: return
 
-        // Listener para uso diario
-        usageListener = db.collection("uso_diario")
+        // Listener solo para el límite diario
+        limitsListener = db.collection("control_dispositivo_hijo")
             .document(userId)
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
-                    Toast.makeText(this, "Error al obtener datos de uso: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Error al obtener límite: ${e.message}", Toast.LENGTH_SHORT).show()
                     return@addSnapshotListener
                 }
 
                 snapshot?.let { doc ->
-                    val usedTime = doc.getLong("tiempo_usado") ?: 0L
-                    updateUsageTime(usedTime)
-                }
-            }
-
-        // Listener para límites
-        limitsListener = db.collection("limites_apps")
-            .document(userId)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Toast.makeText(this, "Error al obtener límites: ${e.message}", Toast.LENGTH_SHORT).show()
-                    return@addSnapshotListener
-                }
-
-                snapshot?.let { doc ->
-                    val dailyLimit = doc.getLong("limite_diario") ?: 0L
-                    val usedTime = doc.getLong("tiempo_usado") ?: 0L
-                    startCountdown(dailyLimit - usedTime)
+                    dailyLimit = doc.getLong("limite_diario") ?: TimeUnit.HOURS.toMillis(2)
                 }
             }
     }
 
-    private fun updateUsageTime(usedTimeMillis: Long) {
-        val hours = TimeUnit.MILLISECONDS.toHours(usedTimeMillis)
-        val minutes = TimeUnit.MILLISECONDS.toMinutes(usedTimeMillis) % 60
+    private fun setupBroadcastReceiver() {
+        timeUpdateReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == DeviceMonitorService.ACTION_TIME_UPDATE) {
+                    val timeUsed = intent.getLongExtra(DeviceMonitorService.EXTRA_TIME_USED, 0)
+                    val timeRemaining = intent.getLongExtra(DeviceMonitorService.EXTRA_TIME_REMAINING, 0)
+                    val limitReached = intent.getBooleanExtra(DeviceMonitorService.EXTRA_LIMIT_REACHED, false)
 
-        tvUsedTime.text = "Usado: ${hours}h ${minutes}m"
-
-        // Obtener el límite diario
-        val userId = auth.currentUser?.uid ?: return
-        db.collection("limites_apps")
-            .document(userId)
-            .get()
-            .addOnSuccessListener { doc ->
-                val dailyLimit = doc.getLong("limite_diario") ?: 0L
-                val remainingTime = dailyLimit - usedTimeMillis
-                val remainingHours = TimeUnit.MILLISECONDS.toHours(remainingTime)
-                val remainingMinutes = TimeUnit.MILLISECONDS.toMinutes(remainingTime) % 60
-
-                tvRemainingTime.text = "Restante: ${remainingHours}h ${remainingMinutes}m"
-
-                // Actualizar progreso
-                val progress = if (dailyLimit > 0) {
-                    ((usedTimeMillis.toFloat() / dailyLimit.toFloat()) * 100).toInt()
-                } else {
-                    0
+                    updateUI(timeUsed, timeRemaining, limitReached)
                 }
-                progressBar.progress = progress
             }
+        }
+
+        val filter = IntentFilter(DeviceMonitorService.ACTION_TIME_UPDATE)
+        localBroadcastManager.registerReceiver(timeUpdateReceiver!!, filter)
     }
 
-    private fun startCountdown(remainingTimeMillis: Long) {
-        countDownTimer?.cancel()
+    private fun updateUI(timeUsed: Long, timeRemaining: Long, limitReached: Boolean) {
+        // Actualizar tiempo usado
+        val hoursUsed = TimeUnit.MILLISECONDS.toHours(timeUsed)
+        val minutesUsed = TimeUnit.MILLISECONDS.toMinutes(timeUsed) % 60
+        tvUsedTime.text = "Tiempo usado: ${hoursUsed}h ${minutesUsed}m"
 
-        countDownTimer = object : CountDownTimer(remainingTimeMillis, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                val hours = TimeUnit.MILLISECONDS.toHours(millisUntilFinished)
-                val minutes = TimeUnit.MILLISECONDS.toMinutes(millisUntilFinished) % 60
-                val seconds = TimeUnit.MILLISECONDS.toSeconds(millisUntilFinished) % 60
+        // Actualizar tiempo restante
+        val hoursRemaining = TimeUnit.MILLISECONDS.toHours(timeRemaining)
+        val minutesRemaining = TimeUnit.MILLISECONDS.toMinutes(timeRemaining) % 60
+        tvRemainingTime.text = "Tiempo restante: ${hoursRemaining}h ${minutesRemaining}m"
 
-                tvCountdown.text = String.format(
-                    "Tiempo restante: %02d:%02d:%02d",
-                    hours, minutes, seconds
-                )
-            }
+        // Actualizar progreso
+        val totalTime = timeUsed + timeRemaining
+        val progress = if (totalTime > 0) {
+            ((timeUsed.toFloat() / totalTime.toFloat()) * 100).toInt()
+        } else {
+            0
+        }
+        progressBar.progress = progress
 
-            override fun onFinish() {
-                tvCountdown.text = "Tiempo restante: 00:00:00"
-                // Notificar al padre que se alcanzó el límite
-                notifyParentLimitReached()
-            }
-        }.start()
-    }
-
-    private fun notifyParentLimitReached() {
-        val userId = auth.currentUser?.uid ?: return
-        val alerta = hashMapOf(
-            "tipo" to "limite_alcanzado",
-            "childId" to userId,
-            "fecha" to FieldValue.serverTimestamp(),
-            "mensaje" to "Se ha alcanzado el límite de tiempo diario"
-        )
-
-        db.collection("alertas")
-            .add(alerta)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Se ha notificado a tus padres", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Error al notificar: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    private fun checkLocationPermission() {
-        when {
-            hasLocationPermission() -> {
-                startLocationUpdates()
-            }
-            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
-                showPermissionRationaleDialog()
-            }
-            else -> {
-                requestLocationPermission()
-            }
+        // Actualizar estado visual si se alcanzó el límite
+        if (limitReached) {
+            tvRemainingTime.setTextColor(getColor(android.R.color.holo_red_dark))
+        } else {
+            tvRemainingTime.setTextColor(getColor(android.R.color.black))
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
+    private fun startLocationUpdates() {
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            Log.d("PantallaHijoActivity", "Iniciando actualizaciones para userId: $userId")
+            locationManager.startLocationUpdates(userId)
+        } else {
+            Log.e("PantallaHijoActivity", "No hay usuario autenticado")
+        }
     }
 
-    private fun requestLocationPermission() {
-        locationPermissionRequest.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
+    private fun stopLocationUpdates() {
+        locationUpdateRunnable?.let {
+            handler.removeCallbacks(it)
+            locationUpdateRunnable = null
+        }
+    }
+
+    private fun checkLocationPermission() {
+        Log.d("PantallaHijoActivity", "Verificando permisos de ubicación")
+        when {
+            locationManager.hasLocationPermission() -> {
+                Log.d("PantallaHijoActivity", "Ya tiene permisos de ubicación")
+                startLocationUpdates()
+            }
+            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
+                Log.d("PantallaHijoActivity", "Mostrando diálogo de explicación")
+                showPermissionRationaleDialog()
+            }
+            else -> {
+                Log.d("PantallaHijoActivity", "Solicitando permisos de ubicación")
+                locationPermissionRequest.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+        }
     }
 
     private fun showPermissionRationaleDialog() {
         AlertDialog.Builder(this)
             .setTitle("Permiso de ubicación necesario")
-            .setMessage("Esta aplicación necesita acceso a la ubicación para que tus padres puedan saber dónde estás.")
+            .setMessage("Esta aplicación necesita acceso a la ubicación para funcionar correctamente.")
             .setPositiveButton("Solicitar permiso") { _, _ ->
-                requestLocationPermission()
+                locationPermissionRequest.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
             }
             .setNegativeButton("Cancelar") { dialog, _ ->
                 dialog.dismiss()
-                Toast.makeText(this, "La funcionalidad de ubicación no estará disponible", Toast.LENGTH_LONG).show()
             }
             .create()
             .show()
@@ -296,7 +307,7 @@ class PantallaHijoActivity : AppCompatActivity() {
     private fun showPermissionDeniedDialog() {
         AlertDialog.Builder(this)
             .setTitle("Permiso denegado")
-            .setMessage("Para usar la funcionalidad de ubicación, necesitas habilitar los permisos en la configuración.")
+            .setMessage("Esta aplicación necesita acceso a la ubicación para funcionar correctamente. Por favor, habilita el permiso en la configuración.")
             .setPositiveButton("Ir a configuración") { _, _ ->
                 openAppSettings()
             }
@@ -312,68 +323,5 @@ class PantallaHijoActivity : AppCompatActivity() {
             data = Uri.fromParts("package", packageName, null)
             startActivity(this)
         }
-    }
-
-    private fun startLocationUpdates() {
-        // Cancelar actualizaciones anteriores si existen
-        stopLocationUpdates()
-
-        // Crear nuevo runnable para actualizaciones periódicas
-        locationUpdateRunnable = object : Runnable {
-            override fun run() {
-                getCurrentLocation()
-                handler.postDelayed(this, LOCATION_UPDATE_INTERVAL)
-            }
-        }
-
-        // Iniciar actualizaciones
-        handler.post(locationUpdateRunnable!!)
-    }
-
-    private fun stopLocationUpdates() {
-        locationUpdateRunnable?.let {
-            handler.removeCallbacks(it)
-            locationUpdateRunnable = null
-        }
-    }
-
-    private fun getCurrentLocation() {
-        if (!hasLocationPermission()) return
-
-        try {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, object : CancellationToken() {
-                override fun onCanceledRequested(listener: OnTokenCanceledListener) = CancellationTokenSource().token
-
-                override fun isCancellationRequested() = false
-            }).addOnSuccessListener { location ->
-                location?.let { updateLocationInFirestore(it) }
-            }
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "Error al obtener ubicación: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun updateLocationInFirestore(location: Location) {
-        val userId = auth.currentUser?.uid ?: return
-        val locationData = hashMapOf(
-            "latitud" to location.latitude,
-            "longitud" to location.longitude,
-            "timestamp" to FieldValue.serverTimestamp()
-        )
-
-        db.collection("hijos")
-            .document(userId)
-            .update("ubicacion", locationData)
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Error al actualizar ubicación: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        countDownTimer?.cancel()
-        stopLocationUpdates()
-        usageListener?.remove()
-        limitsListener?.remove()
     }
 }

@@ -6,131 +6,179 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import org.w3c.dom.Text
-import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.concurrent.TimeUnit
 
 class TiempoActividad : AppCompatActivity() {
+    private lateinit var tvCurrentLimit: TextView
+    private lateinit var btnSetTime: Button
+    private lateinit var btnSave: Button
+    private lateinit var btnCancel: Button
+    private lateinit var tvChildName: TextView
+    private lateinit var toolbar: Toolbar
 
-    private lateinit var auth: FirebaseAuth
-    private lateinit var db: FirebaseFirestore
-    private var startTimeMillis: Long = 0
-    private var endTimeMillis: Long = 0
+    private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
+    private var selectedTimeMillis: Long = 0L
+    private var childId: String? = null
+    private var childName: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.tiempo_actividad)
+        setContentView(R.layout.activity_tiempo)
 
-        auth = FirebaseAuth.getInstance()
-        db = FirebaseFirestore.getInstance()
+        initializeViews()
+        setupToolbar()
+        setupClickListeners()
+        loadChildData()
+    }
 
-        val valorHoraInicio = findViewById<TextView>(R.id.valorHoraInicio)
-        val valorHoraFin = findViewById<TextView>(R.id.valorHoraFin)
-        val botonDefinirTiempo = findViewById<Button>(R.id.botonDefinirTiempo)
-        val textoAhoraNo = findViewById<TextView>(R.id.textoAhoraNo)
+    private fun initializeViews() {
+        tvCurrentLimit = findViewById(R.id.tvCurrentLimit)
+        btnSetTime = findViewById(R.id.btnSetTime)
+        btnSave = findViewById(R.id.btnSave)
+        btnCancel = findViewById(R.id.btnCancel)
+        tvChildName = findViewById(R.id.tvChildName)
+        toolbar = findViewById(R.id.toolbar)
+    }
 
-        // Set default times
-        setDefaultTimes(valorHoraInicio, valorHoraFin)
+    private fun setupToolbar() {
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+        toolbar.setNavigationOnClickListener {
+            onBackPressed()
+        }
+    }
 
-        // Click listeners for time pickers
-        valorHoraInicio.setOnClickListener {
-            showTimePickerDialog(true, valorHoraInicio, valorHoraFin)
+    private fun setupClickListeners() {
+        btnSetTime.setOnClickListener {
+            showTimePickerDialog()
         }
 
-        valorHoraFin.setOnClickListener {
-            showTimePickerDialog(false, valorHoraInicio, valorHoraFin)
+        btnSave.setOnClickListener {
+            saveTimeLimit()
         }
 
-        // Click listener for the save button
-        botonDefinirTiempo.setOnClickListener {
-            saveTiempoActividad()
-        }
-
-        // Click listener for "Ahora no"
-        textoAhoraNo.setOnClickListener {
-            // Navigate back or close activity, for example:
+        btnCancel.setOnClickListener {
             finish()
         }
     }
 
-    private fun setDefaultTimes(valorHoraInicio: TextView, valorHoraFin: TextView) {
-        val calendar = Calendar.getInstance()
-        // Default start time: 7:00 AM
-        calendar.set(Calendar.HOUR_OF_DAY, 7)
-        calendar.set(Calendar.MINUTE, 0)
-        startTimeMillis = calendar.timeInMillis
-        valorHoraInicio.text = formatTime(startTimeMillis)
-
-        // Default end time: 5:00 PM
-        calendar.set(Calendar.HOUR_OF_DAY, 17)
-        calendar.set(Calendar.MINUTE, 0)
-        endTimeMillis = calendar.timeInMillis
-        valorHoraFin.text = formatTime(endTimeMillis)
-    }
-
-    private fun showTimePickerDialog(isStartTime: Boolean,valorHoraInicio: TextView, valorHoraFin: TextView) {
-        val calendar = Calendar.getInstance()
-        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
-        val currentMinute = calendar.get(Calendar.MINUTE)
-
-        val timePickerDialog = TimePickerDialog(
-            this,
-            { _, hourOfDay, minute ->
-                val selectedCalendar = Calendar.getInstance()
-                selectedCalendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                selectedCalendar.set(Calendar.MINUTE, minute)
-                val selectedTimeMillis = selectedCalendar.timeInMillis
-
-                if (isStartTime) {
-                    startTimeMillis = selectedTimeMillis
-                    valorHoraInicio.text = formatTime(startTimeMillis)
-                } else {
-                    endTimeMillis = selectedTimeMillis
-                    valorHoraFin.text = formatTime(endTimeMillis)
-                }
-            },
-            currentHour,
-            currentMinute,
-            false // Use false for 24-hour format if desired, true for AM/PM
-        )
-        timePickerDialog.show()
-    }
-
-    private fun formatTime(timeMillis: Long): String {
-        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        return sdf.format(Date(timeMillis))
-    }
-
-    private fun saveTiempoActividad() {
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            Toast.makeText(this, "Usuario no autenticado.", Toast.LENGTH_SHORT).show()
+    private fun loadChildData() {
+        childId = intent.getStringExtra("childId")
+        if (childId == null) {
+            Toast.makeText(this, "Error: ID de hijo no proporcionado", Toast.LENGTH_SHORT).show()
+            finish()
             return
         }
 
-        if (startTimeMillis >= endTimeMillis) {
-            Toast.makeText(this, "La hora de inicio debe ser anterior a la hora de finalización.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val tiempoData = hashMapOf(
-            "userId" to currentUser.uid,
-            "horaInicio" to startTimeMillis,
-            "horaFin" to endTimeMillis,
-            "timestamp" to System.currentTimeMillis() // Optional: for tracking when it was set
-        )
-
-        db.collection("tiemposActividad")
-            .document(currentUser.uid) // Use user ID as document ID for easy retrieval
-            .set(tiempoData)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Tiempo de actividad guardado.", Toast.LENGTH_SHORT).show()
-                // Optionally, navigate to another screen or give more feedback
+        // Obtener nombre del hijo
+        db.collection("hijos").document(childId!!)
+            .get()
+            .addOnSuccessListener { document ->
+                childName = document.getString("nombre") ?: "Hijo"
+                tvChildName.text = "Configurar tiempo para $childName"
+                loadCurrentLimit()
             }
             .addOnFailureListener { e ->
-                Toast.makeText(this, "Error al guardar: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error al cargar datos: ${e.message}", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+    }
+
+    private fun loadCurrentLimit() {
+        db.collection("control_dispositivo_hijo")
+            .document(childId!!)
+            .get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val currentLimit = document.getLong("limite_diario") ?: TimeUnit.HOURS.toMillis(2)
+                    selectedTimeMillis = currentLimit
+                    updateTimeDisplay(currentLimit)
+                } else {
+                    // Si no existe, usar valor por defecto
+                    selectedTimeMillis = TimeUnit.HOURS.toMillis(2)
+                    updateTimeDisplay(selectedTimeMillis)
+                }
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Error al cargar límite: ${e.message}", Toast.LENGTH_SHORT).show()
+                // Usar valor por defecto en caso de error
+                selectedTimeMillis = TimeUnit.HOURS.toMillis(2)
+                updateTimeDisplay(selectedTimeMillis)
+            }
+    }
+
+    private fun showTimePickerDialog() {
+        val calendar = Calendar.getInstance()
+        val currentHours = TimeUnit.MILLISECONDS.toHours(selectedTimeMillis).toInt()
+        val currentMinutes = (TimeUnit.MILLISECONDS.toMinutes(selectedTimeMillis) % 60).toInt()
+
+        TimePickerDialog(
+            this,
+            { _, hourOfDay, minute ->
+                selectedTimeMillis = TimeUnit.HOURS.toMillis(hourOfDay.toLong()) +
+                        TimeUnit.MINUTES.toMillis(minute.toLong())
+                updateTimeDisplay(selectedTimeMillis)
+            },
+            currentHours,
+            currentMinutes,
+            true
+        ).show()
+    }
+
+    private fun updateTimeDisplay(timeMillis: Long) {
+        val hours = TimeUnit.MILLISECONDS.toHours(timeMillis)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(timeMillis) % 60
+        tvCurrentLimit.text = "Tiempo seleccionado: ${hours}h ${minutes}m"
+    }
+
+    private fun saveTimeLimit() {
+        if (childId == null) return
+
+        val updates = hashMapOf<String, Any>(
+            "limite_diario" to selectedTimeMillis,
+            "ultima_actualizacion" to System.currentTimeMillis(),
+            "tiempo_usado" to 0L,
+            "tiempo_gracia_activo" to false
+        )
+
+        db.collection("control_dispositivo_hijo")
+            .document(childId!!)
+            .update(updates)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Límite de tiempo actualizado", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            .addOnFailureListener { e ->
+                // Si el documento no existe, crearlo
+                if (e.message?.contains("No document to update") == true) {
+                    val newDocument = hashMapOf(
+                        "parentId" to (auth.currentUser?.uid ?: return@addOnFailureListener),
+                        "childId" to childId,
+                        "limite_diario" to selectedTimeMillis,
+                        "tiempo_usado" to 0L,
+                        "ultima_actualizacion" to System.currentTimeMillis(),
+                        "tiempo_gracia_activo" to false,
+                        "codigo_desbloqueo" to (100000..999999).random().toString()
+                    )
+
+                    db.collection("control_dispositivo_hijo")
+                        .document(childId!!)
+                        .set(newDocument)
+                        .addOnSuccessListener {
+                            Toast.makeText(this, "Límite de tiempo guardado", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
+                        .addOnFailureListener { e2 ->
+                            Toast.makeText(this, "Error al guardar: ${e2.message}", Toast.LENGTH_SHORT).show()
+                        }
+                } else {
+                    Toast.makeText(this, "Error al actualizar: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
     }
 }

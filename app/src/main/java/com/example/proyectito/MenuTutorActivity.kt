@@ -23,8 +23,13 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomNavigation: com.google.android.material.bottomnavigation.BottomNavigationView
     private lateinit var userName: TextView
-    private var alertsListener: ListenerRegistration? = null
+    private var controlListener: ListenerRegistration? = null
     private var childrenListener: ListenerRegistration? = null
+
+    // Mantener referencias a los fragmentos
+    private var tiempoUsoFragment: TiempoUsoFragment? = null
+    private var controlFragment: ControlFragment? = null
+    private var ubicacionFragment: UbicacionFragment? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,31 +44,38 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         setupNavigationDrawer()
         setupFirestoreListeners()
 
-        // Cargar el fragmento inicial
-        if (savedInstanceState == null) {
-            loadFragment(TiempoUsoFragment())
-        }
-
         // Configurar Bottom Navigation
         bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_tiempo_uso -> {
-                    loadFragment(TiempoUsoFragment())
+                    if (tiempoUsoFragment == null) {
+                        tiempoUsoFragment = TiempoUsoFragment()
+                    }
+                    loadFragment(tiempoUsoFragment!!)
                     true
                 }
                 R.id.nav_control -> {
-                    loadFragment(ControlFragment())
+                    if (controlFragment == null) {
+                        controlFragment = ControlFragment()
+                    }
+                    loadFragment(controlFragment!!)
                     true
                 }
                 R.id.nav_ubicacion -> {
-                    loadFragment(UbicacionFragment())
+                    if (ubicacionFragment == null) {
+                        ubicacionFragment = UbicacionFragment()
+                    }
+                    loadFragment(ubicacionFragment!!)
                     true
                 }
                 else -> false
             }
         }
 
+        // Cargar el fragmento inicial si no hay estado guardado
         if (savedInstanceState == null) {
+            tiempoUsoFragment = TiempoUsoFragment()
+            loadFragment(tiempoUsoFragment!!)
             bottomNavigation.selectedItemId = R.id.nav_tiempo_uso
         }
 
@@ -95,36 +107,6 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private fun setupFirestoreListeners() {
         val userId = auth.currentUser?.uid ?: return
 
-        // Listener para alertas
-        alertsListener = db.collection("alertas")
-            .whereEqualTo("parentId", userId)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Toast.makeText(this, "Error al obtener alertas: ${e.message}", Toast.LENGTH_SHORT).show()
-                    return@addSnapshotListener
-                }
-
-                snapshot?.let { documents ->
-                    for (doc in documents) {
-                        val tipo = doc.getString("tipo")
-                        val mensaje = doc.getString("mensaje")
-                        val childId = doc.getString("childId")
-
-                        when (tipo) {
-                            "limite_alcanzado" -> {
-                                // Obtener nombre del hijo
-                                db.collection("hijos").document(childId ?: "")
-                                    .get()
-                                    .addOnSuccessListener { childDoc ->
-                                        val childName = childDoc.getString("nombre") ?: "Tu hijo"
-                                        Toast.makeText(this, "$childName: $mensaje", Toast.LENGTH_LONG).show()
-                                    }
-                            }
-                        }
-                    }
-                }
-            }
-
         // Listener para hijos asociados
         childrenListener = db.collection("parent_child_relations")
             .whereEqualTo("parent_id", userId)
@@ -134,18 +116,59 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
                     return@addSnapshotListener
                 }
 
+                val childrenIds = snapshot?.documents?.mapNotNull { it.getString("child_id") } ?: emptyList()
+
                 // Actualizar la lista de hijos en el fragmento actual
                 val currentFragment = supportFragmentManager.findFragmentById(R.id.fragmentContainer)
                 if (currentFragment is TiempoUsoFragment) {
-                    currentFragment.updateChildrenList(snapshot?.documents?.mapNotNull { it.getString("child_id") } ?: emptyList())
+                    currentFragment.updateChildrenList(childrenIds)
                 }
+
+                // Configurar listener para control de dispositivos
+                setupControlListener(childrenIds)
             }
+    }
+
+    private fun setupControlListener(childrenIds: List<String>) {
+        // Remover listener anterior si existe
+        controlListener?.remove()
+
+        // Crear listener para cada hijo
+        childrenIds.forEach { childId ->
+            db.collection("control_dispositivo_hijo")
+                .document(childId)
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Toast.makeText(this, "Error al obtener datos de control: ${e.message}", Toast.LENGTH_SHORT).show()
+                        return@addSnapshotListener
+                    }
+
+                    snapshot?.let { doc ->
+                        val tiempoUsado = doc.getLong("tiempo_usado") ?: 0L
+                        val limiteDiario = doc.getLong("limite_diario") ?: 0L
+
+                        // Verificar si se ha alcanzado el límite
+                        if (tiempoUsado >= limiteDiario) {
+                            // Obtener nombre del hijo
+                            db.collection("hijos").document(childId)
+                                .get()
+                                .addOnSuccessListener { childDoc ->
+                                    val childName = childDoc.getString("nombre") ?: "Tu hijo"
+                                    Toast.makeText(
+                                        this,
+                                        "$childName ha alcanzado el límite de tiempo diario",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                        }
+                    }
+                }
+        }
     }
 
     private fun loadUserData() {
         val currentUser = auth.currentUser
         currentUser?.let { user ->
-
             // Obtener datos del tutor desde Firestore
             db.collection("tutores").document(user.uid)
                 .get()
@@ -174,7 +197,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             }
             R.id.nav_logout -> {
                 auth.signOut()
-                startActivity(Intent(this, LoginActivity::class.java))
+                startActivity(Intent(this, RoleSelectionActivity::class.java))
                 finish()
             }
         }
@@ -192,7 +215,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
 
     override fun onDestroy() {
         super.onDestroy()
-        alertsListener?.remove()
+        controlListener?.remove()
         childrenListener?.remove()
     }
 }

@@ -65,4 +65,7 @@ dependencies {
     implementation(libs.guava)
     implementation (libs.glide)
     annotationProcessor (libs.compiler)
+    //implementation("com.google.android.gms:play-services-base:18.7.0")
+    //implementation("com.google.android.gms:play-services-tasks:18.3.0")
+    //implementation("androidx.core:core-ktx:1.12.0")
 }

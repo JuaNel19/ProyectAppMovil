@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    android:versionCode="1"
+    android:versionName="1.0">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.camera.autofocus" />
 
     <application
+        android:name=".ProyectitoApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -19,6 +25,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Proyectito"
         tools:targetApi="31">
+
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAVfVHg7Xah8959cPv0zVp0THb_khhO3wY" />
 
         <activity
             android:name=".RoleSelectionActivity"
@@ -37,6 +47,21 @@
         <activity android:name=".GenerarCodigoQRActivity" />
         <activity android:name=".EditarTiempoActivity" />
         <activity android:name=".EscanearCodigoQRActivity" />
+
+        <service
+            android:name=".DeviceMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+
+        <activity
+            android:name=".DeviceLockActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showOnLockScreen="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
     </application>
 
 </manifest>
