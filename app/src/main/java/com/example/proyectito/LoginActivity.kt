@@ -2,6 +2,7 @@ package com.example.proyectito
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -10,10 +11,12 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var db: FirebaseFirestore
+    private val TAG = "LoginActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,32 +52,64 @@ class LoginActivity : AppCompatActivity() {
 
     private fun loginUser(email: String, password: String) {
         auth.signInWithEmailAndPassword(email, password)
-            .addOnCompleteListener(this) { task ->
-                if (task.isSuccessful) {
-                    // Verificar si el email está verificado
-                    val user = auth.currentUser
-                    if (user?.isEmailVerified == true) {
-                        // Email verificado, verificar el rol en la colección correcta
-                        verifyUserRole(user.uid)
-                    } else {
-                        // Email no verificado
-                        Toast.makeText(this, "Por favor verifica tu email antes de iniciar sesión", Toast.LENGTH_LONG).show()
-                        // Enviar email de verificación nuevamente
-                        user?.sendEmailVerification()
-                            ?.addOnCompleteListener { verificationTask ->
-                                if (verificationTask.isSuccessful) {
-                                    Toast.makeText(this, "Se ha enviado un nuevo email de verificación", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(this, "Error al enviar email de verificación: ${verificationTask.exception?.message}", Toast.LENGTH_SHORT).show()
+            .addOnSuccessListener {
+                // Obtener el token FCM
+                FirebaseMessaging.getInstance().token
+                    .addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            val token = task.result
+                            Log.d(TAG, "Token FCM obtenido: $token")
+
+                            // Guardar el token en Firestore
+                            val userId = auth.currentUser?.uid
+                            if (userId != null) {
+                                db.collection("usuarios")
+                                    .document(userId)
+                                    .update("fcmToken", token)
+                                    .addOnSuccessListener {
+                                        Log.d(TAG, "Token FCM guardado exitosamente")
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e(TAG, "Error al guardar token FCM: ${e.message}")
+                                    }
+                            }
+                        } else {
+                            Log.e(TAG, "Error al obtener token FCM: ${task.exception?.message}")
+                        }
+                    }
+
+                // Verificar el rol del usuario
+                val userId = auth.currentUser?.uid
+                if (userId != null) {
+                    db.collection("usuarios")
+                        .document(userId)
+                        .get()
+                        .addOnSuccessListener { document ->
+                            val rol = document.getString("rol")
+                            Log.d(TAG, "Rol del usuario: $rol")
+                            when (rol) {
+                                "padre" -> {
+                                    startActivity(Intent(this, MenuTutorActivity::class.java))
+                                    finish()
+                                }
+                                "hijo" -> {
+                                    startActivity(Intent(this, PantallaHijoActivity::class.java))
+                                    finish()
+                                }
+                                else -> {
+                                    startActivity(Intent(this, RoleSelectionActivity::class.java))
+                                    finish()
                                 }
                             }
-                        // Cerrar sesión
-                        auth.signOut()
-                    }
-                } else {
-                    // Login failed
-                    handleAuthError(task.exception)
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Error al obtener rol: ${e.message}")
+                        }
                 }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error al iniciar sesión: ${e.message}")
+                Toast.makeText(this, "Error al iniciar sesión: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 

@@ -58,9 +58,12 @@ class PantallaHijoActivity : AppCompatActivity() {
     private var dailyLimit: Long = 0
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val LOCATION_UPDATE_INTERVAL = 3 * 60 * 1000L // 3 minutos
+    private val TAG = "PantallaHijo"
 
     private lateinit var localBroadcastManager: LocalBroadcastManager
     private var timeUpdateReceiver: BroadcastReceiver? = null
+    private lateinit var childDeviceManager: ChildDeviceManager
+    private lateinit var blockedAppsAdapter: BlockedAppsAdapter
 
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -82,6 +85,11 @@ class PantallaHijoActivity : AppCompatActivity() {
 
         Log.d("PantallaHijoActivity", "onCreate iniciado")
 
+        // Inicializar Firebase
+        auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
+        childDeviceManager = ChildDeviceManager(this)
+
         // Iniciar servicios de monitoreo
         DeviceMonitorService.startService(this)
 
@@ -90,16 +98,12 @@ class PantallaHijoActivity : AppCompatActivity() {
         setupNavigationDrawer()
         setupRecyclerView()
 
-        // Inicializar Firebase
-        auth = FirebaseAuth.getInstance()
-        db = FirebaseFirestore.getInstance()
-
         // Inicializar LocationManager
         locationManager = CustomLocationManager(this)
         Log.d("PantallaHijoActivity", "LocationManager inicializado")
 
-        // Verificar y solicitar permisos de ubicación
-        checkLocationPermission()
+        // Verificar y solicitar permisos
+        checkRequiredPermissions()
 
         // Iniciar listener de límites
         setupFirestoreListener()
@@ -107,6 +111,21 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Configurar receptor de broadcasts
         localBroadcastManager = LocalBroadcastManager.getInstance(this)
         setupBroadcastReceiver()
+
+        // Sincronizar apps instaladas al iniciar
+        if (childDeviceManager.checkUsageStatsPermission()) {
+            childDeviceManager.syncInstalledApps()
+        } else {
+            Toast.makeText(this, "Se requiere permiso de uso de apps para el control parental", Toast.LENGTH_LONG).show()
+            childDeviceManager.requestUsageStatsPermission()
+        }
+
+        // Iniciar el servicio de bloqueo de apps
+        startService(Intent(this, AppBlockerService::class.java))
+
+        // Actualizar token FCM
+        FCMUtils.updateFCMToken()
+
     }
 
     override fun onResume() {
@@ -118,6 +137,12 @@ class PantallaHijoActivity : AppCompatActivity() {
         } else {
             Log.e("PantallaHijoActivity", "No hay permisos de ubicación")
         }
+
+        // Verificar permisos nuevamente cuando la actividad se reanuda
+        checkRequiredPermissions()
+
+        // Actualizar token FCM
+        FCMUtils.updateFCMToken()
     }
 
     override fun onPause() {
@@ -134,6 +159,8 @@ class PantallaHijoActivity : AppCompatActivity() {
             localBroadcastManager.unregisterReceiver(it)
         }
         locationManager.stopLocationUpdates()
+        // Asegurarse de que el servicio se detenga si la actividad se destruye
+        stopService(Intent(this, AppBlockerService::class.java))
     }
 
     private fun initializeViews() {
@@ -179,7 +206,105 @@ class PantallaHijoActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         rvBlockedApps.layoutManager = LinearLayoutManager(this)
-        // TODO: Implement adapter for blocked apps
+        blockedAppsAdapter = BlockedAppsAdapter { packageName, appName ->
+            requestAppUnblock(packageName, appName)
+        }
+        rvBlockedApps.adapter = blockedAppsAdapter
+
+        // Cargar apps bloqueadas
+        loadBlockedApps()
+    }
+
+    private fun loadBlockedApps() {
+        val userId = auth.currentUser?.uid ?: return
+        Log.d(TAG, "Cargando apps bloqueadas para usuario: $userId")
+
+        db.collection("children")
+            .document(userId)
+            .collection("installedApps")
+            .document("apps")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e(TAG, "Error al cargar apps bloqueadas", e)
+                    return@addSnapshotListener
+                }
+
+                val appsList = snapshot?.get("apps") as? List<Map<String, Any>> ?: emptyList()
+                Log.d(TAG, "Apps encontradas: ${appsList.size}")
+
+                val blockedApps = appsList
+                    .filter { appMap -> appMap["bloqueado"] == true }
+                    .mapNotNull { appMap ->
+                        val packageName = appMap["packageName"] as? String
+                        val appName = appMap["nombre"] as? String
+
+                        if (packageName != null && appName != null) {
+                            try {
+                                val icon = packageManager.getApplicationIcon(packageName)
+                                BlockedApp(packageName, appName, icon)
+                            } catch (e: PackageManager.NameNotFoundException) {
+                                Log.e(TAG, "Error al obtener icono para $packageName", e)
+                                null
+                            }
+                        } else null
+                    }
+
+                Log.d(TAG, "Apps bloqueadas encontradas: ${blockedApps.size}")
+                blockedAppsAdapter.submitList(blockedApps)
+            }
+    }
+
+    private fun requestAppUnblock(packageName: String, appName: String) {
+        val userId = auth.currentUser?.uid ?: return
+        Log.d(TAG, "Iniciando solicitud de desbloqueo para app: $appName")
+
+        // Obtener el parentId desde la relación padre-hijo
+        db.collection("parent_child_relations")
+            .whereEqualTo("child_id", userId)
+            .get()
+            .addOnSuccessListener { documents ->
+                if (documents.isEmpty) {
+                    Log.e(TAG, "No se encontró relación padre-hijo")
+                    Toast.makeText(this, "Error al enviar solicitud", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+
+                val parentId = documents.documents[0].getString("parent_id")
+                if (parentId == null) {
+                    Log.e(TAG, "ParentId es null")
+                    Toast.makeText(this, "Error al enviar solicitud", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+
+                Log.d(TAG, "ParentId encontrado: $parentId")
+
+                val request = hashMapOf(
+                    "childId" to userId,
+                    "childName" to (auth.currentUser?.displayName ?: "Hijo"),
+                    "appName" to appName,
+                    "packageName" to packageName,
+                    "parentId" to parentId,
+                    "status" to "pending",
+                    "timestamp" to System.currentTimeMillis()
+                )
+
+                Log.d(TAG, "Guardando solicitud en Firestore: $request")
+
+                db.collection("unblockRequests")
+                    .add(request)
+                    .addOnSuccessListener { documentReference ->
+                        Log.d(TAG, "Solicitud guardada exitosamente con ID: ${documentReference.id}")
+                        Toast.makeText(this, "Solicitud enviada", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error al enviar solicitud", e)
+                        Toast.makeText(this, "Error al enviar solicitud", Toast.LENGTH_SHORT).show()
+                    }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error al obtener parentId", e)
+                Toast.makeText(this, "Error al enviar solicitud", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun setupFirestoreListener() {
@@ -240,9 +365,47 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Actualizar estado visual si se alcanzó el límite
         if (limitReached) {
             tvRemainingTime.setTextColor(getColor(android.R.color.holo_red_dark))
+            // Crear alerta de tiempo agotado
+            createTimeLimitAlert()
         } else {
             tvRemainingTime.setTextColor(getColor(android.R.color.black))
         }
+    }
+
+    private fun createTimeLimitAlert() {
+        val userId = auth.currentUser?.uid ?: return
+
+        // Obtener el parentId desde la relación padre-hijo
+        db.collection("parent_child_relations")
+            .whereEqualTo("child_id", userId)
+            .get()
+            .addOnSuccessListener { documents ->
+                if (documents.isEmpty) {
+                    Log.e(TAG, "No se encontró relación padre-hijo")
+                    return@addOnSuccessListener
+                }
+
+                val parentId = documents.documents[0].getString("parent_id") ?: return@addOnSuccessListener
+
+                val alert = hashMapOf(
+                    "parentId" to parentId,
+                    "childId" to userId,
+                    "childName" to (auth.currentUser?.displayName ?: "Hijo"),
+                    "tipo" to "TIEMPO_AGOTADO",
+                    "mensaje" to "El tiempo de uso diario ha sido agotado",
+                    "timestamp" to System.currentTimeMillis(),
+                    "leida" to false
+                )
+
+                db.collection("alertas")
+                    .add(alert)
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error al crear alerta de tiempo", e)
+                    }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error al obtener parentId", e)
+            }
     }
 
     private fun startLocationUpdates() {
@@ -322,6 +485,24 @@ class PantallaHijoActivity : AppCompatActivity() {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", packageName, null)
             startActivity(this)
+        }
+    }
+
+    private fun checkRequiredPermissions() {
+        // Verificar permiso de uso de apps
+        if (!childDeviceManager.checkUsageStatsPermission()) {
+            Toast.makeText(this, "Se requiere permiso de uso de apps para el control parental", Toast.LENGTH_LONG).show()
+            childDeviceManager.requestUsageStatsPermission()
+        }
+
+        // Verificar permiso de superposición
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Se requiere permiso de superposición para el control parental", Toast.LENGTH_LONG).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
         }
     }
 }

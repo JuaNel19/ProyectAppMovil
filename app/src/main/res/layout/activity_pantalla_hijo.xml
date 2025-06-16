@@ -135,30 +135,30 @@
                 app:layout_constraintTop_toBottomOf="@id/cardUsedTime" />
 
             <TextView
-                android:id="@+id/tvCountdown"
+                android:id="@+id/tvBlockedAppsTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Tiempo restante: 01:30:00"
-                android:textColor="#5DADE2"
-                android:textSize="18sp"
+                android:layout_marginTop="24dp"
+                android:text="Apps Bloqueadas"
+                android:textColor="#2C3E50"
+                android:textSize="20sp"
                 android:textStyle="bold"
-                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/progressBar" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvBlockedApps"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/rounded_white_background"
                 android:clipToPadding="false"
                 android:padding="8dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/tvCountdown" />
+                app:layout_constraintTop_toBottomOf="@id/tvBlockedAppsTitle" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 

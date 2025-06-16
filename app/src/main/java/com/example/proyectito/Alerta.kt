@@ -1,25 +1,28 @@
 package com.example.proyectito
 
-import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+enum class TipoAlerta {
+    DESBLOQUEO_APP,
+    TIEMPO_AGOTADO
+}
 
 data class Alerta(
-    val id: String = "",
-    val tipo: String = "",
-    val mensaje: String = "",
-    val estado: String = "",
-    val fecha: Timestamp = Timestamp.now(),
-    val appId: String = "",
-    val tiempoSolicitado: Int = 0,
-    val tiempoAprobado: Int = 0
+    val id: String,
+    val tipo: TipoAlerta,
+    val mensaje: String,
+    val timestamp: Long,
+    val childId: String,
+    val childName: String,
+    val leida: Boolean,
+    val appName: String? = null,
+    val packageName: String? = null
 ) {
-    companion object {
-        const val TIPO_INSTALACION = "instalacion"
-        const val TIPO_SOLICITUD_TIEMPO = "solicitud_tiempo"
-        const val TIPO_DESBLOQUEO = "desbloqueo"
-        const val TIPO_USO_BLOQUEADO = "uso_bloqueado"
-
-        const val ESTADO_PENDIENTE = "pendiente"
-        const val ESTADO_APROBADO = "aprobado"
-        const val ESTADO_DENEGADO = "denegado"
+    fun getFormattedTime(): String {
+        val date = Date(timestamp)
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        return dateFormat.format(date)
     }
 }

@@ -1,8 +1,13 @@
 package com.example.proyectito
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.MenuItem
+import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +19,7 @@ import com.google.android.material.navigation.NavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.example.proyectito.FCMUtils
 
 class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
     private lateinit var auth: FirebaseAuth
@@ -25,6 +31,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var userName: TextView
     private var controlListener: ListenerRegistration? = null
     private var childrenListener: ListenerRegistration? = null
+    private val TAG = "MenuTutorActivity"
 
     // Mantener referencias a los fragmentos
     private var tiempoUsoFragment: TiempoUsoFragment? = null
@@ -78,6 +85,12 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             loadFragment(tiempoUsoFragment!!)
             bottomNavigation.selectedItemId = R.id.nav_tiempo_uso
         }
+
+        // Crear canal de notificaciones
+        createNotificationChannel()
+
+        // Actualizar token FCM
+        FCMUtils.updateFCMToken()
 
         loadUserData()
     }
@@ -217,5 +230,28 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         super.onDestroy()
         controlListener?.remove()
         childrenListener?.remove()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Actualizar token FCM cada vez que la actividad se reanuda
+        FCMUtils.updateFCMToken()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = "unblock_requests"
+            val channelName = "Solicitudes de Desbloqueo"
+            val channelDescription = "Notificaciones de solicitudes de desbloqueo de aplicaciones"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel(channelId, channelName, importance).apply {
+                description = channelDescription
+                enableVibration(true)
+                enableLights(true)
+            }
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "Canal de notificaciones creado: $channelId")
+        }
     }
 }

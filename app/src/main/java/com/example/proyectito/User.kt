@@ -8,7 +8,8 @@ data class User(
     val nombre: String = "",
     val tipo: String = "", // "tutor" o "hijo"
     val fechaCreacion: Timestamp = Timestamp.now(),
-    val ultimoAcceso: Timestamp = Timestamp.now()
+    val ultimoAcceso: Timestamp = Timestamp.now(),
+    val dni: String = ""
 ) {
     companion object {
         const val TIPO_TUTOR = "tutor"

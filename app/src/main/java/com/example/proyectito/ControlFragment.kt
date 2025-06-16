@@ -18,7 +18,6 @@ class ControlFragment : Fragment() {
     private lateinit var childSelector: AutoCompleteTextView
     private lateinit var tilChildSelector: TextInputLayout
     private lateinit var cardBloquearApps: MaterialCardView
-    private lateinit var cardLimitarTiempo: MaterialCardView
     private lateinit var cardAppsMasUsadas: MaterialCardView
     private lateinit var cardAlertas: MaterialCardView
 
@@ -51,7 +50,6 @@ class ControlFragment : Fragment() {
         childSelector = view.findViewById(R.id.childSelector)
         tilChildSelector = view.findViewById(R.id.tilChildSelector)
         cardBloquearApps = view.findViewById(R.id.cardBloquearApps)
-        cardLimitarTiempo = view.findViewById(R.id.cardLimitarTiempo)
         cardAppsMasUsadas = view.findViewById(R.id.cardAppsMasUsadas)
         cardAlertas = view.findViewById(R.id.cardAlertas)
     }
@@ -72,18 +70,9 @@ class ControlFragment : Fragment() {
             } ?: showSelectChildMessage()
         }
 
-        cardLimitarTiempo.setOnClickListener {
-            currentChildId?.let { childId ->
-                val intent = Intent(requireContext(), LimitarTiempoActivity::class.java).apply {
-                    putExtra("childId", childId)
-                }
-                startActivity(intent)
-            } ?: showSelectChildMessage()
-        }
-
         cardAppsMasUsadas.setOnClickListener {
             currentChildId?.let { childId ->
-                val intent = Intent(requireContext(), AppsMasUsadasActivity::class.java).apply {
+                val intent = Intent(requireContext(), MostUsedAppsActivity::class.java).apply {
                     putExtra("childId", childId)
                 }
                 startActivity(intent)
@@ -159,14 +148,12 @@ class ControlFragment : Fragment() {
 
     private fun updateCardsState(enabled: Boolean) {
         cardBloquearApps.isEnabled = enabled
-        cardLimitarTiempo.isEnabled = enabled
         cardAppsMasUsadas.isEnabled = enabled
         cardAlertas.isEnabled = enabled
 
         // Actualizar la apariencia visual de las cards
         val alpha = if (enabled) 1.0f else 0.5f
         cardBloquearApps.alpha = alpha
-        cardLimitarTiempo.alpha = alpha
         cardAppsMasUsadas.alpha = alpha
         cardAlertas.alpha = alpha
     }

@@ -1,149 +1,143 @@
 package com.example.proyectito
 
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 
 class BloquearAppsActivity : AppCompatActivity() {
-    private lateinit var toolbar: MaterialToolbar
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var progressBar: ProgressBar
-    private lateinit var tvEmpty: TextView
-    private lateinit var adapter: AppAdapter
     private lateinit var db: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
-    private var childId: String? = null
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var textViewNoApps: TextView
+    private lateinit var adapter: AppsAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_bloquear_apps)
 
-        // Inicializar Firebase
         db = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
 
-        // Obtener childId del intent
-        childId = intent.getStringExtra("childId")
-        if (childId == null) {
-            Toast.makeText(this, "Error: No se especificó el niño", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
+        // Configurar Toolbar
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "Bloquear Apps"
 
-        initializeViews()
-        setupToolbar()
-        setupRecyclerView()
-        loadChildInfo()
+        // Inicializar vistas
+        recyclerView = findViewById(R.id.recyclerApps)
+        progressBar = findViewById(R.id.progressBar)
+        textViewNoApps = findViewById(R.id.tvNoApps)
+
+        // Configurar RecyclerView
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        adapter = AppsAdapter { app, isBlocked ->
+            updateAppBlockStatus(app, isBlocked)
+        }
+        recyclerView.adapter = adapter
+
+        // Cargar apps
         loadApps()
     }
 
-    private fun initializeViews() {
-        toolbar = findViewById(R.id.toolbar)
-        recyclerView = findViewById(R.id.recyclerApps)
-        progressBar = findViewById(R.id.progressBar)
-        tvEmpty = findViewById(R.id.tvNoApps)
-    }
-
-    private fun setupToolbar() {
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { onBackPressed() }
-    }
-
-    private fun setupRecyclerView() {
-        adapter = AppAdapter { app, isBlocked ->
-            updateAppState(app, isBlocked)
-        }
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = adapter
-    }
-
-    private fun loadChildInfo() {
-        childId?.let { id ->
-            db.collection("children")
-                .document(id)
-                .get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        val childName = document.getString("name") ?: "Niño"
-                        toolbar.title = "Bloquear Apps - $childName"
-                    }
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Error al cargar información del niño", Toast.LENGTH_SHORT).show()
-                }
-        }
-    }
-
     private fun loadApps() {
+        val userId = auth.currentUser?.uid ?: return
+        val childId = intent.getStringExtra("childId") ?: return
+
         progressBar.visibility = View.VISIBLE
-        recyclerView.visibility = View.GONE
-        tvEmpty.visibility = View.GONE
+        textViewNoApps.visibility = View.GONE
 
-        childId?.let { id ->
-            db.collection("children")
-                .document(id)
-                .collection("blockedApps")
-                .orderBy("name", Query.Direction.ASCENDING)
-                .addSnapshotListener { snapshot, error ->
-                    progressBar.visibility = View.GONE
+        // Obtener apps instaladas del hijo usando addSnapshotListener para actualizaciones en tiempo real
+        db.collection("children")
+            .document(childId)
+            .collection("installedApps")
+            .document("apps")
+            .addSnapshotListener { document, error ->
+                progressBar.visibility = View.GONE
 
-                    if (error != null) {
-                        Toast.makeText(this, "Error al cargar apps: ${error.message}", Toast.LENGTH_SHORT).show()
-                        return@addSnapshotListener
-                    }
-
-                    val apps = snapshot?.documents?.mapNotNull { doc ->
-                        try {
-                            AppInfo(
-                                nombre = doc.getString("name") ?: "",
-                                packageName = doc.id,
-                                icono = doc.getString("icon") ?: "",
-                                bloqueado = doc.getBoolean("blocked") ?: false
-                            )
-                        } catch (e: Exception) {
-                            null
-                        }
-                    } ?: emptyList()
-
-                    if (apps.isEmpty()) {
-                        tvEmpty.visibility = View.VISIBLE
-                        recyclerView.visibility = View.GONE
-                    } else {
-                        tvEmpty.visibility = View.GONE
-                        recyclerView.visibility = View.VISIBLE
-                        adapter.submitList(apps)
-                    }
+                if (error != null) {
+                    Log.e("BloquearAppsActivity", "Error al cargar apps", error)
+                    textViewNoApps.visibility = View.VISIBLE
+                    return@addSnapshotListener
                 }
-        }
+
+                val appsList = document?.get("apps") as? List<Map<String, Any>> ?: emptyList()
+                val apps = appsList.map { appMap ->
+                    AppInfo(
+                        packageName = appMap["packageName"] as String,
+                        nombre = appMap["nombre"] as String,
+                        bloqueado = appMap["bloqueado"] as? Boolean ?: false,
+                        icono = appMap["icono"] as? String ?: ""
+                    )
+                }
+
+                adapter.submitList(apps)
+                textViewNoApps.visibility = if (apps.isEmpty()) View.VISIBLE else View.GONE
+            }
     }
 
-    private fun updateAppState(app: AppInfo, isBlocked: Boolean) {
-        childId?.let { id ->
-            val appRef = db.collection("children")
-                .document(id)
-                .collection("blockedApps")
-                .document(app.packageName)
+    private fun updateAppBlockStatus(app: AppInfo, isBlocked: Boolean) {
+        val userId = auth.currentUser?.uid ?: return
+        val childId = intent.getStringExtra("childId") ?: return
 
-            appRef.update("blocked", isBlocked)
-                .addOnSuccessListener {
-                    // Actualizar UI localmente
-                    adapter.updateAppState(app.packageName, isBlocked)
+        Log.d("BloquearAppsActivity", "Actualizando estado de bloqueo para ${app.packageName} a $isBlocked")
+
+        // Obtener la lista actual de apps
+        db.collection("children")
+            .document(childId)
+            .collection("installedApps")
+            .document("apps")
+            .get()
+            .addOnSuccessListener { document ->
+                val appsList = document.get("apps") as? List<Map<String, Any>> ?: emptyList()
+                Log.d("BloquearAppsActivity", "Lista actual de apps: $appsList")
+
+                // Actualizar el estado de bloqueo de la app específica
+                val updatedAppsList = appsList.map { appMap ->
+                    if (appMap["packageName"] == app.packageName) {
+                        Log.d("BloquearAppsActivity", "Encontrada app ${app.packageName}, actualizando estado a $isBlocked")
+                        appMap.toMutableMap().apply {
+                            put("bloqueado", isBlocked)
+                        }
+                    } else {
+                        appMap
+                    }
                 }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Error al actualizar estado: ${e.message}", Toast.LENGTH_SHORT).show()
-                    // Revertir cambio en UI
-                    adapter.updateAppState(app.packageName, !isBlocked)
-                }
-        }
+
+                Log.d("BloquearAppsActivity", "Lista actualizada de apps: $updatedAppsList")
+
+                // Guardar la lista actualizada usando update
+                db.collection("children")
+                    .document(childId)
+                    .collection("installedApps")
+                    .document("apps")
+                    .update("apps", updatedAppsList)
+                    .addOnSuccessListener {
+                        Log.d("BloquearAppsActivity", "Estado de bloqueo actualizado exitosamente para ${app.packageName}")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("BloquearAppsActivity", "Error al actualizar estado", e)
+                        Toast.makeText(this, "Error al actualizar estado: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+            .addOnFailureListener { e ->
+                Log.e("BloquearAppsActivity", "Error al obtener lista de apps", e)
+                Toast.makeText(this, "Error al obtener lista de apps: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressed()
+        return true
     }
 }
