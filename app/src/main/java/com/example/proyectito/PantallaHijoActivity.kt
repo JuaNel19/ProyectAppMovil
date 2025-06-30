@@ -142,7 +142,7 @@ class PantallaHijoActivity : AppCompatActivity() {
         Log.d("PantallaHijoActivity", "onResume")
 
         // Verificar permisos nuevamente cuando la actividad se reanuda
-        checkRequiredPermissions()
+        //checkRequiredPermissions()
 
         // Verificar permisos de ubicación específicamente
         checkLocationPermission()
@@ -535,80 +535,95 @@ class PantallaHijoActivity : AppCompatActivity() {
     private fun checkRequiredPermissions() {
         Log.d(TAG, "Verificando permisos requeridos")
 
-        var allPermissionsGranted = true
-        var permissionsRequested = false
+        // Solicitar permisos en cadena, uno tras otro
+        checkNotificationPermission()
+    }
 
-        // Verificar permiso de notificaciones (Android 13+)
+    private fun checkNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                Log.d(TAG, "Permiso de notificaciones no concedido")
-                allPermissionsGranted = false
-                permissionsRequested = true
-                Toast.makeText(this, "Se requiere permiso de notificaciones para recibir alertas", Toast.LENGTH_LONG).show()
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    NOTIFICATION_PERMISSION_REQUEST_CODE
-                )
-            } else {
-                Log.d(TAG, "Permiso de notificaciones concedido")
+                AlertDialog.Builder(this)
+                    .setTitle("Permiso de notificaciones necesario")
+                    .setMessage("Esta aplicación necesita permiso de notificaciones para recibir alertas importantes.")
+                    .setPositiveButton("Solicitar permiso") { _, _ ->
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                            NOTIFICATION_PERMISSION_REQUEST_CODE
+                        )
+                    }
+                    .setNegativeButton("Cancelar") { dialog, _ ->
+                        dialog.dismiss()
+                        // Continuar con el siguiente permiso aunque se cancele
+                        checkUsageStatsPermission()
+                    }
+                    .setOnDismissListener {
+                        // Continuar con el siguiente permiso después del diálogo
+                        checkUsageStatsPermission()
+                    }
+                    .show()
+                return
             }
         }
-
-        // Verificar permiso de uso de apps
-        if (!childDeviceManager.checkUsageStatsPermission()) {
-            Log.d(TAG, "Permiso de uso de apps no concedido")
-            allPermissionsGranted = false
-            permissionsRequested = true
-            Toast.makeText(this, "Se requiere permiso de uso de apps para el control parental", Toast.LENGTH_LONG).show()
-            childDeviceManager.requestUsageStatsPermission()
-        } else {
-            Log.d(TAG, "Permiso de uso de apps concedido")
-        }
-
-        // Verificar permiso de superposición
-        if (!Settings.canDrawOverlays(this)) {
-            Log.d(TAG, "Permiso de superposición no concedido")
-            allPermissionsGranted = false
-            permissionsRequested = true
-            Toast.makeText(this, "Se requiere permiso de superposición para el control parental", Toast.LENGTH_LONG).show()
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-        } else {
-            Log.d(TAG, "Permiso de superposición concedido")
-        }
-
-        // Marcar que se han verificado los permisos
-        permissionsChecked = true
-
-        // Si todos los permisos están concedidos y no se han solicitado nuevos, sincronizar apps
-        if (allPermissionsGranted && !permissionsRequested && !appsSynced) {
-            Log.d(TAG, "Todos los permisos concedidos, sincronizando apps")
-            syncAppsIfNeeded()
-        } else if (permissionsRequested) {
-            Log.d(TAG, "Se solicitaron permisos, esperando respuesta del usuario")
-        }
+        // Si ya está concedido o no es necesario, continuar
+        checkUsageStatsPermission()
     }
 
-    private fun syncAppsIfNeeded() {
-        if (appsSynced) {
-            Log.d(TAG, "Apps ya sincronizadas, saltando")
+    private fun checkUsageStatsPermission() {
+        if (!childDeviceManager.checkUsageStatsPermission()) {
+            AlertDialog.Builder(this)
+                .setTitle("Permiso de uso de apps necesario")
+                .setMessage("Esta aplicación necesita permiso de uso de apps para el control parental.")
+                .setPositiveButton("Solicitar permiso") { _, _ ->
+                    childDeviceManager.requestUsageStatsPermission()
+                }
+                .setNegativeButton("Cancelar") { dialog, _ ->
+                    dialog.dismiss()
+                    checkOverlayPermission()
+                }
+                .setOnDismissListener {
+                    checkOverlayPermission()
+                }
+                .show()
             return
         }
+        checkOverlayPermission()
+    }
 
-        if (childDeviceManager.checkUsageStatsPermission()) {
-            Log.d(TAG, "Sincronizando apps instaladas")
-            childDeviceManager.syncInstalledApps()
-            appsSynced = true
-        } else {
-            Log.w(TAG, "No se pueden sincronizar apps sin permisos")
+    private fun checkOverlayPermission() {
+        if (!Settings.canDrawOverlays(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("Permiso de superposición necesario")
+                .setMessage("Esta aplicación necesita permiso de superposición para el control parental.")
+                .setPositiveButton("Solicitar permiso") { _, _ ->
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                }
+                .setNegativeButton("Cancelar") { dialog, _ ->
+                    dialog.dismiss()
+                    onAllRequiredPermissionsChecked()
+                }
+                .setOnDismissListener {
+                    onAllRequiredPermissionsChecked()
+                }
+                .show()
+            return
+        }
+        onAllRequiredPermissionsChecked()
+    }
+
+    private fun onAllRequiredPermissionsChecked() {
+        permissionsChecked = true
+        if (areAllRequiredPermissionsGranted() && !appsSynced) {
+            Log.d(TAG, "Todos los permisos concedidos, sincronizando apps")
+            syncAppsIfNeeded()
         }
     }
 
@@ -697,5 +712,20 @@ class PantallaHijoActivity : AppCompatActivity() {
         editor.putInt("last_alert_day", lastAlertDay)
         editor.putLong("last_alert_time_used", lastAlertTimeUsed)
         editor.apply()
+    }
+
+    private fun syncAppsIfNeeded() {
+        if (appsSynced) {
+            Log.d(TAG, "Apps ya sincronizadas, saltando")
+            return
+        }
+
+        if (childDeviceManager.checkUsageStatsPermission()) {
+            Log.d(TAG, "Sincronizando apps instaladas")
+            childDeviceManager.syncInstalledApps()
+            appsSynced = true
+        } else {
+            Log.w(TAG, "No se pueden sincronizar apps sin permisos")
+        }
     }
 }
