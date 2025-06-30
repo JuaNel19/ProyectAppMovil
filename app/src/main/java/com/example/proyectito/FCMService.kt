@@ -31,7 +31,8 @@ class FCMService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         Log.d(TAG, "Nuevo token FCM: $token")
-        // El token se actualizará automáticamente en Firestore a través de FCMUtils
+        // Actualizar el token en Firestore usando FCMUtils
+        FCMUtils.updateFCMToken()
     }
 
     private fun sendNotification(title: String, messageBody: String) {

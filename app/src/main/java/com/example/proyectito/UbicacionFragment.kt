@@ -5,6 +5,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -25,11 +27,22 @@ class UbicacionFragment : Fragment() {
 
     private var map: GoogleMap? = null
     private lateinit var tvLastUpdate: TextView
+    private lateinit var tvLocationInfo: TextView
     private lateinit var fabRefresh: FloatingActionButton
+    private lateinit var childSelector: AutoCompleteTextView
     private lateinit var db: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
     private var currentMarker: com.google.android.gms.maps.model.Marker? = null
     private var isMapReady = false
+
+    // Variables para el selector de hijos
+    private var currentChildId: String? = null
+    private var childrenList: List<ChildInfo> = emptyList()
+
+    data class ChildInfo(
+        val id: String,
+        val name: String
+    )
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,7 +62,9 @@ class UbicacionFragment : Fragment() {
 
             // Inicializar vistas
             tvLastUpdate = view.findViewById(R.id.tvLastUpdate)
+            tvLocationInfo = view.findViewById(R.id.tvLocationInfo)
             fabRefresh = view.findViewById(R.id.fabRefresh)
+            childSelector = view.findViewById(R.id.childSelector)
 
             // Configurar mapa
             val mapFragment = childFragmentManager
@@ -75,6 +90,12 @@ class UbicacionFragment : Fragment() {
             fabRefresh.setOnClickListener {
                 cargarUbicacion()
             }
+
+            // Configurar selector de hijos
+            setupChildSelector()
+
+            // Cargar lista de hijos
+            loadChildren()
         } catch (e: Exception) {
             Toast.makeText(context, "Error al inicializar: ${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -92,29 +113,34 @@ class UbicacionFragment : Fragment() {
             return
         }
 
-        // Consultar directamente en ubicacion_actual usando el parentId
+        // Verificar que hay un hijo seleccionado
+        if (currentChildId == null) {
+            Toast.makeText(context, "Selecciona un hijo para ver su ubicación", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.d("UbicacionFragment", "Cargando ubicación para hijo: $currentChildId")
+
+        // Consultar la ubicación específica del hijo seleccionado
         db.collection("ubicacion_actual")
             .whereEqualTo("parentId", userId)
+            .whereEqualTo("childId", currentChildId)
             .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(1)
             .get()
             .addOnSuccessListener { documents ->
                 if (documents.isEmpty) {
-                    Toast.makeText(context, "No hay ubicaciones disponibles para tus hijos", Toast.LENGTH_SHORT).show()
+                    val selectedChildName = childrenList.find { it.id == currentChildId }?.name ?: "Tu hijo"
+                    updateLocationInfo("No hay ubicación disponible para $selectedChildName", selectedChildName)
+                    Toast.makeText(context, "No hay ubicación disponible para este hijo", Toast.LENGTH_SHORT).show()
                     return@addOnSuccessListener
                 }
 
-                // Obtener el documento más reciente manualmente
-                val document = documents.documents.maxByOrNull { it.getLong("timestamp") ?: 0L }
-                if (document == null) {
-                    Toast.makeText(context, "Error al procesar la ubicación", Toast.LENGTH_SHORT).show()
-                    return@addOnSuccessListener
-                }
-
+                val document = documents.documents[0]
                 val latitude = document.getDouble("latitude")
                 val longitude = document.getDouble("longitude")
                 val timestamp = document.getLong("timestamp")
                 val accuracy = document.getDouble("accuracy")
-                val childId = document.getString("childId")
 
                 if (latitude == null || longitude == null || timestamp == null) {
                     Toast.makeText(context, "Error: datos de ubicación incompletos", Toast.LENGTH_SHORT).show()
@@ -131,12 +157,13 @@ class UbicacionFragment : Fragment() {
                     latitud = latitude,
                     longitud = longitude,
                     timestamp = timestamp,
-                    childId = childId ?: "",
+                    childId = currentChildId!!,
                     parentId = userId
                 )
 
-                Log.d("UbicacionFragment", "Ubicación cargada: lat=$latitude, lon=$longitude, accuracy=$accuracy, age=${locationAge/1000}s")
-                actualizarMapa(ubicacion)
+                val selectedChildName = childrenList.find { it.id == currentChildId }?.name ?: "Tu hijo"
+                Log.d("UbicacionFragment", "Ubicación cargada para $selectedChildName: lat=$latitude, lon=$longitude, accuracy=$accuracy, age=${locationAge/1000}s")
+                actualizarMapa(ubicacion, selectedChildName)
             }
             .addOnFailureListener { e ->
                 Log.e("UbicacionFragment", "Error al cargar ubicación: ${e.message}")
@@ -148,7 +175,7 @@ class UbicacionFragment : Fragment() {
             }
     }
 
-    private fun actualizarMapa(ubicacion: UbicacionInfo) {
+    private fun actualizarMapa(ubicacion: UbicacionInfo, selectedChildName: String) {
         try {
             val latLng = ubicacion.toLatLng()
             val map = map ?: return
@@ -158,7 +185,7 @@ class UbicacionFragment : Fragment() {
             currentMarker = map.addMarker(
                 MarkerOptions()
                     .position(latLng)
-                    .title("Ubicación actual de tu hijo")
+                    .title("Ubicación actual de $selectedChildName")
                     .snippet("Última actualización: ${formatTimestamp(ubicacion.timestamp)}")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
             )
@@ -172,14 +199,195 @@ class UbicacionFragment : Fragment() {
 
             // Actualizar timestamp
             tvLastUpdate.text = "Última actualización: ${formatTimestamp(ubicacion.timestamp)}"
+
+            getPlaceInfo(latLng, selectedChildName)
         } catch (e: Exception) {
             Toast.makeText(context, "Error al actualizar mapa: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun getPlaceInfo(latLng: LatLng, childName: String) {
+        try {
+            // Ejecutar geocoding en un hilo secundario para evitar bloqueos
+            Thread {
+                try {
+                    Log.d("UbicacionFragment", "Usando geocoding inverso para obtener información de ubicación")
+                    performReverseGeocoding(latLng, childName)
+                } catch (e: Exception) {
+                    Log.e("UbicacionFragment", "Error en geocoding: ${e.message}")
+                    // Actualizar UI en el hilo principal
+                    requireActivity().runOnUiThread {
+                        updateLocationInfo("$childName se encuentra aquí", childName)
+                    }
+                }
+            }.start()
+
+        } catch (e: Exception) {
+            Log.e("UbicacionFragment", "Error al obtener información del lugar: ${e.message}")
+            // En caso de error, mostrar mensaje genérico
+            updateLocationInfo("$childName se encuentra aquí", childName)
+        }
+    }
+
+    private fun performReverseGeocoding(latLng: LatLng, childName: String) {
+        try {
+            val geocoder = android.location.Geocoder(requireContext(), Locale.getDefault())
+
+            // Usar el método síncrono que es compatible con API level 24
+            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+
+            if (addresses != null && addresses.isNotEmpty()) {
+                val address = addresses[0]
+
+                // Intentar obtener el nombre más específico y útil disponible
+                val placeName = when {
+                    // Si hay un nombre de establecimiento específico
+                    !address.featureName.isNullOrEmpty() &&
+                            address.featureName != address.thoroughfare &&
+                            address.featureName != address.locality -> {
+                        address.featureName
+                    }
+                    // Si hay una calle específica
+                    !address.thoroughfare.isNullOrEmpty() -> {
+                        "la calle ${address.thoroughfare}"
+                    }
+                    // Si hay un vecindario específico
+                    !address.subLocality.isNullOrEmpty() -> {
+                        address.subLocality
+                    }
+                    // Si hay una localidad específica
+                    !address.locality.isNullOrEmpty() -> {
+                        address.locality
+                    }
+                    // Si hay un área administrativa
+                    !address.adminArea.isNullOrEmpty() -> {
+                        address.adminArea
+                    }
+                    else -> null
+                }
+
+                if (placeName != null && placeName.isNotEmpty()) {
+                    updateLocationInfo("$childName se encuentra en $placeName", childName)
+                    Log.d("UbicacionFragment", "Ubicación obtenida por geocoding: $placeName")
+                } else {
+                    updateLocationInfo("$childName se encuentra aquí", childName)
+                    Log.d("UbicacionFragment", "No se pudo obtener información específica de la ubicación")
+                }
+            } else {
+                updateLocationInfo("$childName se encuentra aquí", childName)
+                Log.d("UbicacionFragment", "No se encontraron direcciones para las coordenadas")
+            }
+        } catch (e: Exception) {
+            Log.e("UbicacionFragment", "Error en geocoding inverso: ${e.message}")
+            updateLocationInfo("$childName se encuentra aquí", childName)
+        }
+    }
+
+    private fun updateLocationInfo(locationText: String, childName: String) {
+        try {
+            // Asegurar que la actualización de UI se haga en el hilo principal
+            if (isAdded && activity != null) {
+                requireActivity().runOnUiThread {
+                    try {
+                        tvLocationInfo.text = locationText
+                        Log.d("UbicacionFragment", "Información de ubicación actualizada: $locationText")
+                    } catch (e: Exception) {
+                        Log.e("UbicacionFragment", "Error al actualizar TextView: ${e.message}")
+                    }
+                }
+            } else {
+                Log.w("UbicacionFragment", "Fragment no está adjunto o activity es null")
+            }
+        } catch (e: Exception) {
+            Log.e("UbicacionFragment", "Error al actualizar información de ubicación: ${e.message}")
         }
     }
 
     private fun formatTimestamp(timestamp: Long): String {
         val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         return dateFormat.format(Date(timestamp))
+    }
+
+    private fun setupChildSelector() {
+        childSelector.setOnItemClickListener { _, _, position, _ ->
+            val selectedChild = childrenList[position]
+            currentChildId = selectedChild.id
+            Log.d("UbicacionFragment", "Hijo seleccionado: ${selectedChild.name} (${selectedChild.id})")
+            updateLocationInfo("Cargando ubicación de ${selectedChild.name}...", selectedChild.name)
+            cargarUbicacion()
+        }
+    }
+
+    private fun updateChildSelector() {
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            childrenList.map { it.name }
+        )
+        childSelector.setAdapter(adapter)
+        childSelector.isEnabled = true
+
+        // Seleccionar el primer hijo por defecto
+        if (childrenList.isNotEmpty()) {
+            currentChildId = childrenList.first().id
+            childSelector.setText(childrenList.first().name, false)
+            Log.d("UbicacionFragment", "Hijo seleccionado por defecto: ${childrenList.first().name}")
+            updateLocationInfo("Cargando ubicación de ${childrenList.first().name}...", childrenList.first().name)
+            cargarUbicacion()
+        } else {
+            Log.d("UbicacionFragment", "No hay hijos disponibles")
+            childSelector.isEnabled = false
+            updateLocationInfo("No hay hijos asociados", "")
+        }
+    }
+
+    private fun loadChildren() {
+        val userId = auth.currentUser?.uid ?: return
+
+        db.collection("parent_child_relations")
+            .whereEqualTo("parent_id", userId)
+            .get()
+            .addOnSuccessListener { documents ->
+                val childrenIds = documents.mapNotNull { it.getString("child_id") }
+                if (childrenIds.isEmpty()) {
+                    Log.d("UbicacionFragment", "No se encontraron hijos asociados")
+                    return@addOnSuccessListener
+                }
+
+                loadChildrenInfo(childrenIds)
+            }
+            .addOnFailureListener { e ->
+                Log.e("UbicacionFragment", "Error al cargar hijos: ${e.message}")
+                Toast.makeText(context, "Error al cargar hijos: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun loadChildrenInfo(childrenIds: List<String>) {
+        var loadedCount = 0
+        val tempList = mutableListOf<ChildInfo>()
+
+        childrenIds.forEach { childId ->
+            db.collection("hijos").document(childId)
+                .get()
+                .addOnSuccessListener { document ->
+                    val name = document.getString("nombre") ?: "Hijo"
+                    tempList.add(ChildInfo(childId, name))
+                    loadedCount++
+
+                    if (loadedCount == childrenIds.size) {
+                        childrenList = tempList.sortedBy { it.name }
+                        updateChildSelector()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("UbicacionFragment", "Error al cargar información del hijo $childId: ${e.message}")
+                    loadedCount++
+                    if (loadedCount == childrenIds.size) {
+                        childrenList = tempList.sortedBy { it.name }
+                        updateChildSelector()
+                    }
+                }
+        }
     }
 
     override fun onDestroyView() {

@@ -40,6 +40,8 @@ import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.location.LocationManager
 import android.util.Log
+import android.os.Build
+import java.util.Calendar
 
 class PantallaHijoActivity : AppCompatActivity() {
     private lateinit var tvUsedTime: TextView
@@ -57,6 +59,7 @@ class PantallaHijoActivity : AppCompatActivity() {
     private var limitsListener: ListenerRegistration? = null
     private var dailyLimit: Long = 0
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1003
     private val LOCATION_UPDATE_INTERVAL = 3 * 60 * 1000L // 3 minutos
     private val TAG = "PantallaHijo"
 
@@ -65,15 +68,26 @@ class PantallaHijoActivity : AppCompatActivity() {
     private lateinit var childDeviceManager: ChildDeviceManager
     private lateinit var blockedAppsAdapter: BlockedAppsAdapter
 
+    // Variables para controlar el flujo de permisos
+    private var permissionsChecked = false
+    private var appsSynced = false
+
+    // Variables para controlar alertas de tiempo agotado
+    private var timeLimitAlertSent = false
+    private var lastAlertDay = -1
+    private var lastAlertTimeUsed = 0L
+
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         when {
             permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                     permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> {
+                Log.d(TAG, "Permisos de ubicación concedidos")
                 startLocationUpdates()
             }
             else -> {
+                Log.e(TAG, "Permisos de ubicación denegados")
                 showPermissionDeniedDialog()
             }
         }
@@ -90,6 +104,9 @@ class PantallaHijoActivity : AppCompatActivity() {
         db = FirebaseFirestore.getInstance()
         childDeviceManager = ChildDeviceManager(this)
 
+        // Cargar estado de alertas
+        loadTimeLimitAlertState()
+
         // Iniciar servicios de monitoreo
         DeviceMonitorService.startService(this)
 
@@ -102,7 +119,7 @@ class PantallaHijoActivity : AppCompatActivity() {
         locationManager = CustomLocationManager(this)
         Log.d("PantallaHijoActivity", "LocationManager inicializado")
 
-        // Verificar y solicitar permisos
+        // Verificar y solicitar permisos PRIMERO
         checkRequiredPermissions()
 
         // Iniciar listener de límites
@@ -111,14 +128,6 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Configurar receptor de broadcasts
         localBroadcastManager = LocalBroadcastManager.getInstance(this)
         setupBroadcastReceiver()
-
-        // Sincronizar apps instaladas al iniciar
-        if (childDeviceManager.checkUsageStatsPermission()) {
-            childDeviceManager.syncInstalledApps()
-        } else {
-            Toast.makeText(this, "Se requiere permiso de uso de apps para el control parental", Toast.LENGTH_LONG).show()
-            childDeviceManager.requestUsageStatsPermission()
-        }
 
         // Iniciar el servicio de bloqueo de apps
         startService(Intent(this, AppBlockerService::class.java))
@@ -131,18 +140,18 @@ class PantallaHijoActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d("PantallaHijoActivity", "onResume")
-        if (locationManager.hasLocationPermission()) {
-            Log.d("PantallaHijoActivity", "Iniciando actualizaciones de ubicación")
-            startLocationUpdates()
-        } else {
-            Log.e("PantallaHijoActivity", "No hay permisos de ubicación")
-        }
 
         // Verificar permisos nuevamente cuando la actividad se reanuda
         checkRequiredPermissions()
 
-        // Actualizar token FCM
-        FCMUtils.updateFCMToken()
+        // Verificar permisos de ubicación específicamente
+        checkLocationPermission()
+
+        // Si ya se verificaron los permisos y no se han sincronizado las apps, sincronizarlas
+        if (permissionsChecked && !appsSynced && childDeviceManager.checkUsageStatsPermission()) {
+            Log.d(TAG, "Sincronizando apps después de verificar permisos")
+            syncAppsIfNeeded()
+        }
     }
 
     override fun onPause() {
@@ -365,11 +374,46 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Actualizar estado visual si se alcanzó el límite
         if (limitReached) {
             tvRemainingTime.setTextColor(getColor(android.R.color.holo_red_dark))
-            // Crear alerta de tiempo agotado
-            createTimeLimitAlert()
+
+            // Verificar si se debe enviar la alerta
+            if (shouldSendTimeLimitAlert(timeUsed)) {
+                createTimeLimitAlert()
+                timeLimitAlertSent = true
+                lastAlertTimeUsed = timeUsed
+                saveTimeLimitAlertState()
+            }
         } else {
             tvRemainingTime.setTextColor(getColor(android.R.color.black))
+            // Resetear flag cuando el límite ya no está alcanzado
+            if (timeLimitAlertSent) {
+                timeLimitAlertSent = false
+                saveTimeLimitAlertState()
+            }
         }
+    }
+
+    private fun shouldSendTimeLimitAlert(currentTimeUsed: Long): Boolean {
+        val currentDay = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+
+        // Opción A: Reset diario
+        if (currentDay != lastAlertDay) {
+            Log.d(TAG, "Nuevo día detectado, reseteando flag de alerta")
+            return true
+        }
+
+        // Opción B: Reset por nuevo tiempo (cuando el tiempo usado es menor al último alertado)
+        if (currentTimeUsed < lastAlertTimeUsed) {
+            Log.d(TAG, "Tiempo reiniciado detectado, reseteando flag de alerta")
+            return true
+        }
+
+        // Si ya se envió alerta para este tiempo, no enviar otra
+        if (timeLimitAlertSent) {
+            Log.d(TAG, "Alerta ya enviada para este tiempo, saltando")
+            return false
+        }
+
+        return true
     }
 
     private fun createTimeLimitAlert() {
@@ -489,20 +533,169 @@ class PantallaHijoActivity : AppCompatActivity() {
     }
 
     private fun checkRequiredPermissions() {
+        Log.d(TAG, "Verificando permisos requeridos")
+
+        var allPermissionsGranted = true
+        var permissionsRequested = false
+
+        // Verificar permiso de notificaciones (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.d(TAG, "Permiso de notificaciones no concedido")
+                allPermissionsGranted = false
+                permissionsRequested = true
+                Toast.makeText(this, "Se requiere permiso de notificaciones para recibir alertas", Toast.LENGTH_LONG).show()
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            } else {
+                Log.d(TAG, "Permiso de notificaciones concedido")
+            }
+        }
+
         // Verificar permiso de uso de apps
         if (!childDeviceManager.checkUsageStatsPermission()) {
+            Log.d(TAG, "Permiso de uso de apps no concedido")
+            allPermissionsGranted = false
+            permissionsRequested = true
             Toast.makeText(this, "Se requiere permiso de uso de apps para el control parental", Toast.LENGTH_LONG).show()
             childDeviceManager.requestUsageStatsPermission()
+        } else {
+            Log.d(TAG, "Permiso de uso de apps concedido")
         }
 
         // Verificar permiso de superposición
         if (!Settings.canDrawOverlays(this)) {
+            Log.d(TAG, "Permiso de superposición no concedido")
+            allPermissionsGranted = false
+            permissionsRequested = true
             Toast.makeText(this, "Se requiere permiso de superposición para el control parental", Toast.LENGTH_LONG).show()
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:$packageName")
             )
             startActivity(intent)
+        } else {
+            Log.d(TAG, "Permiso de superposición concedido")
         }
+
+        // Marcar que se han verificado los permisos
+        permissionsChecked = true
+
+        // Si todos los permisos están concedidos y no se han solicitado nuevos, sincronizar apps
+        if (allPermissionsGranted && !permissionsRequested && !appsSynced) {
+            Log.d(TAG, "Todos los permisos concedidos, sincronizando apps")
+            syncAppsIfNeeded()
+        } else if (permissionsRequested) {
+            Log.d(TAG, "Se solicitaron permisos, esperando respuesta del usuario")
+        }
+    }
+
+    private fun syncAppsIfNeeded() {
+        if (appsSynced) {
+            Log.d(TAG, "Apps ya sincronizadas, saltando")
+            return
+        }
+
+        if (childDeviceManager.checkUsageStatsPermission()) {
+            Log.d(TAG, "Sincronizando apps instaladas")
+            childDeviceManager.syncInstalledApps()
+            appsSynced = true
+        } else {
+            Log.w(TAG, "No se pueden sincronizar apps sin permisos")
+        }
+    }
+
+    private fun areAllRequiredPermissionsGranted(): Boolean {
+        val usageStatsPermission = childDeviceManager.checkUsageStatsPermission()
+        val overlayPermission = Settings.canDrawOverlays(this)
+        val locationPermission = locationManager.hasLocationPermission()
+        val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true // En versiones anteriores no se requiere
+        }
+
+        Log.d(TAG, "Estado de permisos - Uso de apps: $usageStatsPermission, Superposición: $overlayPermission, Ubicación: $locationPermission, Notificaciones: $notificationPermission")
+
+        return usageStatsPermission && overlayPermission && locationPermission && notificationPermission
+    }
+
+    private fun showPermissionStatusDialog() {
+        val usageStatsPermission = childDeviceManager.checkUsageStatsPermission()
+        val overlayPermission = Settings.canDrawOverlays(this)
+        val locationPermission = locationManager.hasLocationPermission()
+        val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true // En versiones anteriores no se requiere
+        }
+
+        val message = StringBuilder("Estado de permisos:\n\n")
+        message.append("• Uso de apps: ${if (usageStatsPermission) "✅" else "❌"}\n")
+        message.append("• Superposición: ${if (overlayPermission) "✅" else "❌"}\n")
+        message.append("• Ubicación: ${if (locationPermission) "✅" else "❌"}\n")
+        message.append("• Notificaciones: ${if (notificationPermission) "✅" else "❌"}\n\n")
+
+        if (!usageStatsPermission || !overlayPermission || !locationPermission || !notificationPermission) {
+            message.append("Algunos permisos son necesarios para el funcionamiento completo de la app.")
+        } else {
+            message.append("Todos los permisos están concedidos. La app funcionará correctamente.")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Estado de Permisos")
+            .setMessage(message.toString())
+            .setPositiveButton("Verificar Permisos") { _, _ ->
+                resetPermissionState()
+                checkRequiredPermissions()
+                checkLocationPermission()
+            }
+            .setNegativeButton("Cerrar") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .create()
+            .show()
+    }
+
+    private fun resetPermissionState() {
+        Log.d(TAG, "Reiniciando estado de permisos")
+        permissionsChecked = false
+        appsSynced = false
+    }
+
+    private fun loadTimeLimitAlertState() {
+        val prefs = getSharedPreferences("app_preferences", MODE_PRIVATE)
+        timeLimitAlertSent = prefs.getBoolean("time_limit_alert_sent", false)
+        lastAlertDay = prefs.getInt("last_alert_day", -1)
+        lastAlertTimeUsed = prefs.getLong("last_alert_time_used", 0L)
+
+        // Verificar reset diario al cargar
+        checkDailyReset()
+    }
+
+    private fun checkDailyReset() {
+        val currentDay = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        if (currentDay != lastAlertDay) {
+            Log.d(TAG, "Reset de alerta de tiempo agotado detectado")
+            timeLimitAlertSent = false
+            lastAlertDay = currentDay
+            saveTimeLimitAlertState()
+        }
+    }
+
+    private fun saveTimeLimitAlertState() {
+        val prefs = getSharedPreferences("app_preferences", MODE_PRIVATE)
+        val editor = prefs.edit()
+        editor.putBoolean("time_limit_alert_sent", timeLimitAlertSent)
+        editor.putInt("last_alert_day", lastAlertDay)
+        editor.putLong("last_alert_time_used", lastAlertTimeUsed)
+        editor.apply()
     }
 }

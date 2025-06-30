@@ -53,58 +53,10 @@ class LoginActivity : AppCompatActivity() {
     private fun loginUser(email: String, password: String) {
         auth.signInWithEmailAndPassword(email, password)
             .addOnSuccessListener {
-                // Obtener el token FCM
-                FirebaseMessaging.getInstance().token
-                    .addOnCompleteListener { task ->
-                        if (task.isSuccessful) {
-                            val token = task.result
-                            Log.d(TAG, "Token FCM obtenido: $token")
-
-                            // Guardar el token en Firestore
-                            val userId = auth.currentUser?.uid
-                            if (userId != null) {
-                                db.collection("usuarios")
-                                    .document(userId)
-                                    .update("fcmToken", token)
-                                    .addOnSuccessListener {
-                                        Log.d(TAG, "Token FCM guardado exitosamente")
-                                    }
-                                    .addOnFailureListener { e ->
-                                        Log.e(TAG, "Error al guardar token FCM: ${e.message}")
-                                    }
-                            }
-                        } else {
-                            Log.e(TAG, "Error al obtener token FCM: ${task.exception?.message}")
-                        }
-                    }
-
-                // Verificar el rol del usuario
+                // Verificar el rol del usuario y guardar el token FCM
                 val userId = auth.currentUser?.uid
                 if (userId != null) {
-                    db.collection("usuarios")
-                        .document(userId)
-                        .get()
-                        .addOnSuccessListener { document ->
-                            val rol = document.getString("rol")
-                            Log.d(TAG, "Rol del usuario: $rol")
-                            when (rol) {
-                                "padre" -> {
-                                    startActivity(Intent(this, MenuTutorActivity::class.java))
-                                    finish()
-                                }
-                                "hijo" -> {
-                                    startActivity(Intent(this, PantallaHijoActivity::class.java))
-                                    finish()
-                                }
-                                else -> {
-                                    startActivity(Intent(this, RoleSelectionActivity::class.java))
-                                    finish()
-                                }
-                            }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error al obtener rol: ${e.message}")
-                        }
+                    verifyUserRoleAndSaveToken(userId)
                 }
             }
             .addOnFailureListener { e ->
@@ -113,43 +65,72 @@ class LoginActivity : AppCompatActivity() {
             }
     }
 
-    private fun verifyUserRole(userId: String) {
+    private fun verifyUserRoleAndSaveToken(userId: String) {
         // Primero buscar en la colección de tutores
         db.collection("tutores").document(userId)
             .get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     // Es un tutor
-                    android.util.Log.d("LoginActivity", "Usuario encontrado en tutores")
-                    navigateToRole("padre")
+                    Log.d(TAG, "Usuario encontrado en tutores")
+                    saveFCMTokenAndNavigate(userId, "tutores", "padre")
                 } else {
                     // Si no es tutor, buscar en la colección de hijos
-                    android.util.Log.d("LoginActivity", "Usuario no encontrado en tutores, buscando en hijos")
+                    Log.d(TAG, "Usuario no encontrado en tutores, buscando en hijos")
                     db.collection("hijos").document(userId)
                         .get()
                         .addOnSuccessListener { childDocument ->
                             if (childDocument.exists()) {
                                 // Es un hijo
-                                android.util.Log.d("LoginActivity", "Usuario encontrado en hijos")
-                                navigateToRole("hijo")
+                                Log.d(TAG, "Usuario encontrado en hijos")
+                                saveFCMTokenAndNavigate(userId, "hijos", "hijo")
                             } else {
                                 // No se encontró en ninguna colección
-                                android.util.Log.e("LoginActivity", "Usuario no encontrado en ninguna colección")
+                                Log.e(TAG, "Usuario no encontrado en ninguna colección")
                                 Toast.makeText(this, "Error: Usuario no encontrado en ninguna colección", Toast.LENGTH_SHORT).show()
                                 auth.signOut()
                             }
                         }
                         .addOnFailureListener { e ->
-                            android.util.Log.e("LoginActivity", "Error al buscar en hijos: ${e.message}")
+                            Log.e(TAG, "Error al buscar en hijos: ${e.message}")
                             Toast.makeText(this, "Error al verificar rol: ${e.message}", Toast.LENGTH_SHORT).show()
                             auth.signOut()
                         }
                 }
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("LoginActivity", "Error al buscar en tutores: ${e.message}")
+                Log.e(TAG, "Error al buscar en tutores: ${e.message}")
                 Toast.makeText(this, "Error al verificar rol: ${e.message}", Toast.LENGTH_SHORT).show()
                 auth.signOut()
+            }
+    }
+
+    private fun saveFCMTokenAndNavigate(userId: String, collection: String, role: String) {
+        // Obtener el token FCM
+        FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    Log.d(TAG, "Token FCM obtenido: $token")
+
+                    // Guardar el token en la colección correcta
+                    db.collection(collection)
+                        .document(userId)
+                        .update("fcmToken", token)
+                        .addOnSuccessListener {
+                            Log.d(TAG, "Token FCM guardado exitosamente en $collection")
+                            navigateToRole(role)
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Error al guardar token FCM en $collection: ${e.message}")
+                            // Continuar con la navegación aunque falle el guardado del token
+                            navigateToRole(role)
+                        }
+                } else {
+                    Log.e(TAG, "Error al obtener token FCM: ${task.exception?.message}")
+                    // Continuar con la navegación aunque falle la obtención del token
+                    navigateToRole(role)
+                }
             }
     }
 

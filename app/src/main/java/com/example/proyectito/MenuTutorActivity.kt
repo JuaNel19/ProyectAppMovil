@@ -11,6 +11,8 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.fragment.app.Fragment
@@ -20,6 +22,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.example.proyectito.FCMUtils
+import android.Manifest
+import android.content.pm.PackageManager
 
 class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
     private lateinit var auth: FirebaseAuth
@@ -32,6 +36,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private var controlListener: ListenerRegistration? = null
     private var childrenListener: ListenerRegistration? = null
     private val TAG = "MenuTutorActivity"
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
 
     // Mantener referencias a los fragmentos
     private var tiempoUsoFragment: TiempoUsoFragment? = null
@@ -88,6 +93,9 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
 
         // Crear canal de notificaciones
         createNotificationChannel()
+
+        // Verificar y solicitar permiso de notificaciones
+        checkNotificationPermission()
 
         // Actualizar token FCM
         FCMUtils.updateFCMToken()
@@ -252,6 +260,27 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
             Log.d(TAG, "Canal de notificaciones creado: $channelId")
+        }
+    }
+
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.d(TAG, "Solicitando permiso de notificaciones")
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            } else {
+                Log.d(TAG, "Permiso de notificaciones ya concedido")
+            }
+        } else {
+            Log.d(TAG, "No se requiere permiso de notificaciones en esta versión de Android")
         }
     }
 }
