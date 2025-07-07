@@ -9,7 +9,7 @@
     android:orientation="vertical"
     android:gravity="center"
     android:padding="24dp"
-    tools:context=".MainActivity">
+    tools:context=".LoginActivity">
 
 
 
