@@ -50,7 +50,9 @@
         <activity android:name=".LoginActivity"/>
         <activity android:name=".RegisterActivity" />
         <activity android:name=".TiempoActividad" />
-        <activity android:name=".MenuTutorActivity" />
+        <activity 
+            android:name=".MenuTutorActivity"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".PantallaHijoActivity" />
         <activity android:name=".GenerarCodigoQRActivity" />
         <activity android:name=".EditarTiempoActivity" />
@@ -120,6 +122,12 @@
         <activity
             android:name=".AlertasActivity"
             android:exported="false" />
+
+        <service
+            android:name=".LocationForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location"/>
 
     </application>
 

@@ -7,4 +7,7 @@
     <color name="black">#000000</color>
     <color name="blue">#3F51B5</color>
     <color name="verdesito">#33ff86</color>
+    <color name="headerTextPrimary">#222222</color>
+    <color name="headerTextSecondary">#666666</color>
+    <color name="headerBackground">#FFFFFF</color>
 </resources>

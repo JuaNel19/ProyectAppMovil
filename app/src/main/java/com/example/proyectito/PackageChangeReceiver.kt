@@ -37,11 +37,16 @@ class PackageChangeReceiver : BroadcastReceiver() {
 
             // Solo actualizar apps no del sistema
             if (!isSystemApp) {
+                val iconDrawable = try {
+                    applicationInfo.loadIcon(packageManager)
+                } catch (e: Exception) {
+                    androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_launcher_foreground)!!
+                }
                 val appInfo = AppInfo(
                     packageName = packageName,
                     nombre = appName,
                     bloqueado = false,
-                    icono = "" // El ícono se manejará en el InstalledAppsManager
+                    icono = iconDrawable
                 )
 
                 db.collection("children")

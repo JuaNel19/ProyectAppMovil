@@ -67,6 +67,7 @@ class PantallaHijoActivity : AppCompatActivity() {
     private var timeUpdateReceiver: BroadcastReceiver? = null
     private lateinit var childDeviceManager: ChildDeviceManager
     private lateinit var blockedAppsAdapter: BlockedAppsAdapter
+    private lateinit var tvParentMessage: TextView
 
     // Variables para controlar el flujo de permisos
     private var permissionsChecked = false
@@ -122,6 +123,14 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Verificar y solicitar permisos PRIMERO
         checkRequiredPermissions()
 
+        // Iniciar el servicio foreground de ubicación
+        val locationServiceIntent = Intent(this, LocationForegroundService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(locationServiceIntent)
+        } else {
+            startService(locationServiceIntent)
+        }
+
         // Iniciar listener de límites
         setupFirestoreListener()
 
@@ -135,6 +144,10 @@ class PantallaHijoActivity : AppCompatActivity() {
         // Actualizar token FCM
         FCMUtils.updateFCMToken()
 
+        // Eliminar la función loadMessagesFragment y cualquier llamada a ella
+
+        tvParentMessage = findViewById(R.id.tvParentMessage)
+        listenForParentMessage()
     }
 
     override fun onResume() {
@@ -209,8 +222,45 @@ class PantallaHijoActivity : AppCompatActivity() {
 
         val headerView = navigationView.getHeaderView(0)
         val tvChildName = headerView.findViewById<TextView>(R.id.tvChildName)
-        val currentUser = FirebaseAuth.getInstance().currentUser
-        tvChildName.text = "Hola, ${currentUser?.displayName ?: "Usuario"}"
+        val tvChildRole = headerView.findViewById<TextView>(R.id.tvChildRole)
+        loadChildName(tvChildName, tvChildRole)
+    }
+
+    private fun loadChildName(tvChildName: TextView, tvChildRole: TextView) {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            tvChildName.text = "Hola, Usuario"
+            tvChildRole.text = "Cuenta de Hijo"
+            return
+        }
+
+        // Buscar el nombre del hijo en la colección "hijos"
+        db.collection("hijos")
+            .document(userId)
+            .get()
+            .addOnSuccessListener { document ->
+                if (document != null && document.exists()) {
+                    val childName = document.getString("nombre")
+                    if (!childName.isNullOrEmpty()) {
+                        tvChildName.text = "Hola, $childName"
+                        tvChildRole.text = "Cuenta de Hijo"
+                        Log.d(TAG, "Nombre del hijo cargado: $childName")
+                    } else {
+                        tvChildName.text = "Hola, Usuario"
+                        tvChildRole.text = "Cuenta de Hijo"
+                        Log.w(TAG, "Nombre del hijo es null o vacío")
+                    }
+                } else {
+                    tvChildName.text = "Hola, Usuario"
+                    tvChildRole.text = "Cuenta de Hijo"
+                    Log.w(TAG, "Documento del hijo no encontrado")
+                }
+            }
+            .addOnFailureListener { e ->
+                tvChildName.text = "Hola, Usuario"
+                tvChildRole.text = "Cuenta de Hijo"
+                Log.e(TAG, "Error al cargar nombre del hijo", e)
+            }
     }
 
     private fun setupRecyclerView() {
@@ -727,5 +777,39 @@ class PantallaHijoActivity : AppCompatActivity() {
         } else {
             Log.w(TAG, "No se pueden sincronizar apps sin permisos")
         }
+    }
+
+    private fun listenForParentMessage() {
+        val userId = auth.currentUser?.uid ?: return
+        // Obtener el ID del padre asociado
+        db.collection("parent_child_relations")
+            .whereEqualTo("child_id", userId)
+            .get()
+            .addOnSuccessListener { documents ->
+                if (!documents.isEmpty) {
+                    val parentId = documents.documents[0].getString("parent_id") ?: return@addOnSuccessListener
+                    val chatId = listOf(userId, parentId).sorted().joinToString("_")
+                    db.collection("last_messages")
+                        .document(chatId)
+                        .addSnapshotListener { snapshot, e ->
+                            if (e != null) {
+                                tvParentMessage.text = "No hay mensajes del padre"
+                                return@addSnapshotListener
+                            }
+                            if (snapshot != null && snapshot.exists()) {
+                                val content = snapshot.getString("content") ?: ""
+                                if (content.isNotBlank()) {
+                                    tvParentMessage.text = content
+                                } else {
+                                    tvParentMessage.text = "No hay mensajes del padre"
+                                }
+                            } else {
+                                tvParentMessage.text = "No hay mensajes del padre"
+                            }
+                        }
+                } else {
+                    tvParentMessage.text = "No hay mensajes del padre"
+                }
+            }
     }
 }

@@ -25,11 +25,16 @@ class InstalledAppsManager(private val context: Context) {
         return installedApps
             .filter { !isSystemApp(it) }
             .map { appInfo ->
+                val iconDrawable = try {
+                    appInfo.loadIcon(packageManager)
+                } catch (e: Exception) {
+                    androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_launcher_foreground)!!
+                }
                 AppInfo(
                     packageName = appInfo.packageName,
                     nombre = appInfo.loadLabel(packageManager).toString(),
                     bloqueado = false,
-                    icono = ""
+                    icono = iconDrawable
                 )
             }
     }
@@ -49,11 +54,16 @@ class InstalledAppsManager(private val context: Context) {
                     .documents
                     .mapNotNull { doc ->
                         try {
+                            val iconDrawable = try {
+                                context.packageManager.getApplicationIcon(doc.id)
+                            } catch (e: Exception) {
+                                androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_launcher_foreground)!!
+                            }
                             AppInfo(
                                 packageName = doc.id,
                                 nombre = doc.getString("name") ?: "",
                                 bloqueado = doc.getBoolean("blocked") ?: false,
-                                icono = doc.getString("icon") ?: ""
+                                icono = iconDrawable
                             )
                         } catch (e: Exception) {
                             null
@@ -68,8 +78,8 @@ class InstalledAppsManager(private val context: Context) {
                     when (change) {
                         is AppChange.INSTALLED -> {
                             uploadAppIcon(change.app) { iconUrl ->
-                                val appWithIcon = change.app.copy(icono = iconUrl)
-                                updateAppInFirebase(userId, appWithIcon)
+                                // No actualices el campo icono (Drawable) con un String
+                                updateAppInFirebase(userId, change.app)
                             }
                         }
                         is AppChange.REMOVED -> {
@@ -77,8 +87,8 @@ class InstalledAppsManager(private val context: Context) {
                         }
                         is AppChange.UPDATED -> {
                             uploadAppIcon(change.app) { iconUrl ->
-                                val appWithIcon = change.app.copy(icono = iconUrl)
-                                updateAppInFirebase(userId, appWithIcon)
+                                // No actualices el campo icono (Drawable) con un String
+                                updateAppInFirebase(userId, change.app)
                             }
                         }
                     }

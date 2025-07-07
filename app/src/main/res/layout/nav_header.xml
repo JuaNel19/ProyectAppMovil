@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="176dp"
-    android:background="#2C3E50"
+    android:background="@color/headerBackground"
     android:gravity="bottom"
     android:orientation="vertical"
     android:padding="16dp"
@@ -12,24 +12,37 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
         <ImageView
             android:layout_width="60dp"
             android:layout_height="60dp"
             android:src="@android:drawable/ic_menu_myplaces"
-            app:tint="#FFFFFF" />
+            app:tint="@color/headerTextPrimary" />
 
         <TextView
             android:id="@+id/nav_header_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
             android:text="Nombre del Usuario"
             android:textAppearance="@style/TextAppearance.AppCompat.Body1"
             android:textSize="20sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:textColor="@color/headerTextPrimary" />
+
+        <TextView
+            android:id="@+id/nav_header_role"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:text="Cuenta de Padre"
+            android:textAppearance="@style/TextAppearance.AppCompat.Caption"
+            android:textColor="@color/headerTextSecondary"
+            android:textSize="14sp" />
 
     </LinearLayout>
 

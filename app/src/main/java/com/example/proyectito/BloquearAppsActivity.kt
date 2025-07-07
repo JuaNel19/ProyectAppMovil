@@ -71,13 +71,22 @@ class BloquearAppsActivity : AppCompatActivity() {
                     return@addSnapshotListener
                 }
 
+                val pm = packageManager
                 val appsList = document?.get("apps") as? List<Map<String, Any>> ?: emptyList()
                 val apps = appsList.map { appMap ->
+                    val packageName = appMap["packageName"] as String
+                    val nombre = appMap["nombre"] as String
+                    val bloqueado = appMap["bloqueado"] as? Boolean ?: false
+                    val iconDrawable = try {
+                        pm.getApplicationIcon(packageName)
+                    } catch (e: Exception) {
+                        androidx.core.content.ContextCompat.getDrawable(this, R.drawable.ic_launcher_foreground)!!
+                    }
                     AppInfo(
-                        packageName = appMap["packageName"] as String,
-                        nombre = appMap["nombre"] as String,
-                        bloqueado = appMap["bloqueado"] as? Boolean ?: false,
-                        icono = appMap["icono"] as? String ?: ""
+                        packageName = packageName,
+                        nombre = nombre,
+                        bloqueado = bloqueado,
+                        icono = iconDrawable
                     )
                 }
 

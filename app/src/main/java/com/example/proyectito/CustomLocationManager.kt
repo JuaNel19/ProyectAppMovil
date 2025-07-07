@@ -39,6 +39,11 @@ class CustomLocationManager(private val context: Context) {
     private var locationAttempts = 0
     private val MAX_LOCATION_ATTEMPTS = 5
 
+    // Variables para control de subida inteligente
+    private var lastSavedLat: Double? = null
+    private var lastSavedLon: Double? = null
+    private var lastSavedTimestamp: Long = 0L
+
     fun startLocationUpdates(userId: String) {
         Log.d(TAG, "Iniciando actualizaciones de ubicación para userId: $userId")
         stopLocationUpdates()
@@ -143,61 +148,74 @@ class CustomLocationManager(private val context: Context) {
     }
 
     private fun updateLocationInFirestore(location: Location, userId: String) {
-        Log.d(TAG, "Buscando parentId para userId: $userId")
-
-        // Buscar en parent_child_relations usando child_id
-        db.collection("parent_child_relations")
-            .whereEqualTo("child_id", userId)
-            .get()
-            .addOnSuccessListener { documents ->
-                if (documents.isEmpty) {
-                    Log.e(TAG, "No se encontró la relación padre-hijo para userId: $userId")
-                    handleLocationError("No se encontró la relación padre-hijo", userId)
-                    return@addOnSuccessListener
-                }
-
-                val document = documents.documents.first()
-                Log.d(TAG, "Documento encontrado: ${document.id}")
-                Log.d(TAG, "Campos: ${document.data?.keys?.joinToString()}")
-
-                val parentId = document.getString("parent_id")
-                if (parentId == null) {
-                    Log.e(TAG, "No se encontró parent_id en el documento")
-                    handleLocationError("La relación padre-hijo no tiene el campo 'parent_id'", userId)
-                    return@addOnSuccessListener
-                }
-
-                Log.d(TAG, "ParentId encontrado: $parentId")
-                val locationData = hashMapOf(
-                    "latitude" to location.latitude,
-                    "longitude" to location.longitude,
-                    "accuracy" to location.accuracy,
-                    "timestamp" to System.currentTimeMillis(),
-                    "battery_level" to getBatteryLevel(),
-                    "update_interval" to getUpdateInterval(),
-                    "childId" to userId,
-                    "parentId" to parentId
-                )
-
-                Log.d(TAG, "Actualizando ubicación en Firestore...")
-                db.collection("ubicacion_actual")
-                    .document(userId)
-                    .set(locationData)
-                    .addOnSuccessListener {
-                        Log.d(TAG, "Ubicación actualizada correctamente")
-                        lastSuccessfulUpdate = System.currentTimeMillis()
-                        retryCount = 0
-                        Toast.makeText(context, "Ubicación actualizada correctamente", Toast.LENGTH_SHORT).show()
+        val now = System.currentTimeMillis()
+        val lat = location.latitude
+        val lon = location.longitude
+        // Solo guardar si han pasado 5 minutos y la ubicación es diferente
+        val fiveMinutes = 5 * 60 * 1000
+        val isDifferent = lastSavedLat == null || lastSavedLon == null ||
+            (Math.abs(lat - lastSavedLat!!) > 0.0001 || Math.abs(lon - lastSavedLon!!) > 0.0001)
+        val enoughTime = (now - lastSavedTimestamp) >= fiveMinutes
+        if (isDifferent && enoughTime) {
+            Log.d(TAG, "Guardando ubicación: han pasado 5 minutos y la ubicación es diferente")
+            db.collection("parent_child_relations")
+                .whereEqualTo("child_id", userId)
+                .get()
+                .addOnSuccessListener { documents ->
+                    if (documents.isEmpty) {
+                        Log.e(TAG, "No se encontró la relación padre-hijo para userId: $userId")
+                        handleLocationError("No se encontró la relación padre-hijo", userId)
+                        return@addOnSuccessListener
                     }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Error al actualizar ubicación: ${e.message}")
-                        handleLocationError("Error al actualizar ubicación: ${e.message}", userId)
+
+                    val document = documents.documents.first()
+                    Log.d(TAG, "Documento encontrado: ${document.id}")
+                    Log.d(TAG, "Campos: ${document.data?.keys?.joinToString()}")
+
+                    val parentId = document.getString("parent_id")
+                    if (parentId == null) {
+                        Log.e(TAG, "No se encontró parent_id en el documento")
+                        handleLocationError("La relación padre-hijo no tiene el campo 'parent_id'", userId)
+                        return@addOnSuccessListener
                     }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error al buscar relación padre-hijo: ${e.message}")
-                handleLocationError("Error al buscar relación: ${e.message}", userId)
-            }
+
+                    Log.d(TAG, "ParentId encontrado: $parentId")
+                    val locationData = hashMapOf(
+                        "latitude" to lat,
+                        "longitude" to lon,
+                        "accuracy" to location.accuracy,
+                        "timestamp" to now,
+                        "battery_level" to getBatteryLevel(),
+                        "update_interval" to getUpdateInterval(),
+                        "childId" to userId,
+                        "parentId" to parentId
+                    )
+
+                    Log.d(TAG, "Actualizando ubicación en Firestore...")
+                    // CAMBIO: Guardar cada ubicación como un documento nuevo (historial)
+                    db.collection("ubicacion_actual")
+                        .add(locationData)
+                        .addOnSuccessListener {
+                            Log.d(TAG, "Ubicación guardada en historial correctamente")
+                            lastSuccessfulUpdate = now
+                            retryCount = 0
+                            lastSavedLat = lat
+                            lastSavedLon = lon
+                            lastSavedTimestamp = now
+                            Toast.makeText(context, "Ubicación guardada en historial", Toast.LENGTH_SHORT).show()
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Error al guardar ubicación en historial: ", e)
+                            handleLocationError("Error al guardar ubicación en historial: ${e.message}", userId)
+                        }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error al buscar relación padre-hijo: ${e.message}")
+                    handleLocationError("Error al buscar relación: ${e.message}", userId)
+                }
+        } else {
+            Log.d(TAG, "No se guarda ubicación: no han pasado 5 minutos o la ubicación es igual a la anterior")
+        }
     }
 
     private fun handleLocationError(error: String, userId: String) {

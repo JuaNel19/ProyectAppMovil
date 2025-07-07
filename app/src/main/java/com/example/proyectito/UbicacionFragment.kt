@@ -10,6 +10,8 @@ import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.SupportMapFragment
@@ -39,6 +41,12 @@ class UbicacionFragment : Fragment() {
     private var currentChildId: String? = null
     private var childrenList: List<ChildInfo> = emptyList()
 
+    private lateinit var btnLocationHistory: View
+    private lateinit var rvLocationHistory: RecyclerView
+    private var isHistoryVisible = false
+    private lateinit var locationHistoryAdapter: LocationHistoryAdapter
+    private var locationHistoryList: List<UbicacionInfo> = emptyList()
+
     data class ChildInfo(
         val id: String,
         val name: String
@@ -65,6 +73,11 @@ class UbicacionFragment : Fragment() {
             tvLocationInfo = view.findViewById(R.id.tvLocationInfo)
             fabRefresh = view.findViewById(R.id.fabRefresh)
             childSelector = view.findViewById(R.id.childSelector)
+            btnLocationHistory = view.findViewById(R.id.btnLocationHistory)
+            rvLocationHistory = view.findViewById(R.id.rvLocationHistory)
+            locationHistoryAdapter = LocationHistoryAdapter()
+            rvLocationHistory.layoutManager = LinearLayoutManager(requireContext())
+            rvLocationHistory.adapter = locationHistoryAdapter
 
             // Configurar mapa
             val mapFragment = childFragmentManager
@@ -89,6 +102,26 @@ class UbicacionFragment : Fragment() {
             // Configurar FAB
             fabRefresh.setOnClickListener {
                 cargarUbicacion()
+            }
+
+            btnLocationHistory.setOnClickListener {
+                isHistoryVisible = !isHistoryVisible
+                rvLocationHistory.visibility = if (isHistoryVisible) View.VISIBLE else View.GONE
+                val mapFragment = childFragmentManager.findFragmentById(R.id.map)
+                if (isHistoryVisible) {
+                    cargarHistorialUbicaciones()
+                    btnLocationHistory.setBackgroundResource(R.color.colorAccent)
+                    // Ocultar el mapa
+                    if (mapFragment != null) {
+                        childFragmentManager.beginTransaction().hide(mapFragment).commit()
+                    }
+                } else {
+                    btnLocationHistory.setBackgroundResource(R.color.colorPrimaryDark)
+                    // Mostrar el mapa
+                    if (mapFragment != null) {
+                        childFragmentManager.beginTransaction().show(mapFragment).commit()
+                    }
+                }
             }
 
             // Configurar selector de hijos
@@ -172,6 +205,46 @@ class UbicacionFragment : Fragment() {
                 } else {
                     Toast.makeText(context, "Error al cargar ubicación: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
+            }
+    }
+
+    private fun cargarHistorialUbicaciones() {
+        val userId = auth.currentUser?.uid ?: return
+        if (currentChildId == null) {
+            Toast.makeText(context, "Selecciona un hijo para ver el historial", Toast.LENGTH_SHORT).show()
+            return
+        }
+        db.collection("ubicacion_actual")
+            .whereEqualTo("parentId", userId)
+            .whereEqualTo("childId", currentChildId)
+            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(100) // Traer más para filtrar
+            .get()
+            .addOnSuccessListener { documents ->
+                val allList = documents.mapNotNull { doc ->
+                    val lat = doc.getDouble("latitude")
+                    val lon = doc.getDouble("longitude")
+                    val ts = doc.getLong("timestamp")
+                    val childId = doc.getString("childId") ?: ""
+                    val parentId = doc.getString("parentId") ?: ""
+                    if (lat != null && lon != null && ts != null) {
+                        UbicacionInfo(lat, lon, ts, childId, parentId)
+                    } else null
+                }
+                // Filtrar para dejar solo una ubicación cada 5 minutos
+                val filteredList = mutableListOf<UbicacionInfo>()
+                var lastTimestamp: Long? = null
+                for (ubicacion in allList) {
+                    if (lastTimestamp == null || (lastTimestamp - ubicacion.timestamp) >= 5 * 60 * 1000) {
+                        filteredList.add(ubicacion)
+                        lastTimestamp = ubicacion.timestamp
+                    }
+                }
+                locationHistoryList = filteredList
+                locationHistoryAdapter.submitList(filteredList)
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(context, "Error al cargar historial: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 
@@ -312,6 +385,15 @@ class UbicacionFragment : Fragment() {
         childSelector.setOnItemClickListener { _, _, position, _ ->
             val selectedChild = childrenList[position]
             currentChildId = selectedChild.id
+            // Ocultar historial al cambiar de hijo
+            isHistoryVisible = false
+            rvLocationHistory.visibility = View.GONE
+            btnLocationHistory.setBackgroundResource(R.color.colorPrimaryDark)
+            // Mostrar el mapa si estaba oculto
+            val mapFragment = childFragmentManager.findFragmentById(R.id.map)
+            if (mapFragment != null) {
+                childFragmentManager.beginTransaction().show(mapFragment).commit()
+            }
             Log.d("UbicacionFragment", "Hijo seleccionado: ${selectedChild.name} (${selectedChild.id})")
             updateLocationInfo("Cargando ubicación de ${selectedChild.name}...", selectedChild.name)
             cargarUbicacion()
@@ -327,12 +409,13 @@ class UbicacionFragment : Fragment() {
         childSelector.setAdapter(adapter)
         childSelector.isEnabled = true
 
-        // Seleccionar el primer hijo por defecto
         if (childrenList.isNotEmpty()) {
-            currentChildId = childrenList.first().id
-            childSelector.setText(childrenList.first().name, false)
-            Log.d("UbicacionFragment", "Hijo seleccionado por defecto: ${childrenList.first().name}")
-            updateLocationInfo("Cargando ubicación de ${childrenList.first().name}...", childrenList.first().name)
+            // Buscar el hijo previamente seleccionado
+            val selectedIndex = childrenList.indexOfFirst { it.id == currentChildId }
+            val indexToSelect = if (selectedIndex != -1) selectedIndex else 0
+            childSelector.setText(childrenList[indexToSelect].name, false)
+            currentChildId = childrenList[indexToSelect].id
+            updateLocationInfo("Cargando ubicación de ${childrenList[indexToSelect].name}...", childrenList[indexToSelect].name)
             cargarUbicacion()
         } else {
             Log.d("UbicacionFragment", "No hay hijos disponibles")

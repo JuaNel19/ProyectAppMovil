@@ -33,6 +33,7 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
     private lateinit var toolbar: MaterialToolbar
     private lateinit var bottomNavigation: com.google.android.material.bottomnavigation.BottomNavigationView
     private lateinit var userName: TextView
+    private lateinit var userRole: TextView
     private var controlListener: ListenerRegistration? = null
     private var childrenListener: ListenerRegistration? = null
     private val TAG = "MenuTutorActivity"
@@ -112,6 +113,8 @@ class MenuTutorActivity : AppCompatActivity(), NavigationView.OnNavigationItemSe
         // Inicializar las variables del header
         val headerView = navigationView.getHeaderView(0)
         userName = headerView.findViewById(R.id.nav_header_name)
+        userRole = headerView.findViewById(R.id.nav_header_role)
+        userRole.text = "Cuenta de padre"
     }
 
     private fun setupToolbar() {

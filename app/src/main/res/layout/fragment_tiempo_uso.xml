@@ -4,10 +4,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Scrollable content -->
     <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:id="@+id/scrollContent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:fillViewport="true"
+        android:layout_marginBottom="140dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -53,12 +56,13 @@
                 android:id="@+id/progressIndicator"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="12dp"
                 app:indicatorSize="200dp"
-                app:trackThickness="8dp"
-                app:layout_constraintTop_toBottomOf="@id/tilChildSelector"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.497"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent" />
+                app:layout_constraintTop_toBottomOf="@id/tilChildSelector"
+                app:trackThickness="8dp" />
 
             <TextView
                 android:id="@+id/tvProgressText"
@@ -133,12 +137,101 @@
                 android:layout_height="wrap_content"
                 android:text="Generar Nuevo Código"
                 android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
                 app:layout_constraintTop_toBottomOf="@id/tvUnlockCode"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvRecentMessages"
+                android:layout_width="0dp"
+                android:layout_height="200dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/rounded_white_background"
+                android:padding="8dp"
+                app:layout_constraintTop_toBottomOf="@id/btnGenerateNewCode"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
+
+    <!-- Área de mensajes fija abajo (después del ScrollView) -->
+    <LinearLayout
+        android:id="@+id/messageArea"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#FF5722"
+        android:elevation="8dp"
+        android:padding="12dp"
+        android:minHeight="80dp"
+        android:layout_marginBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <EditText
+            android:id="@+id/etMessageToChild"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Escribe un mensaje para tu hijo..."
+            android:inputType="textMultiLine"
+            android:maxLines="3"
+            android:minLines="1"
+            android:padding="12dp"
+            android:background="@drawable/edit_text_background"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:gravity="top|start" />
+
+        <ImageButton
+            android:id="@+id/btnSendMessage"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/rounded_white_background"
+            android:src="@android:drawable/ic_menu_send"
+            android:contentDescription="Enviar mensaje"
+            android:scaleType="centerInside"
+            android:tint="#2196F3" />
+    </LinearLayout>
+
+    <!-- Área para mostrar el mensaje enviado y botón eliminar -->
+    <LinearLayout
+        android:id="@+id/sentMessageArea"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#FFF3E0"
+        android:padding="12dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/messageArea">
+
+        <TextView
+            android:id="@+id/tvSentMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="No hay mensaje enviado"
+            android:textSize="16sp"
+            android:textColor="#2C3E50"
+            android:paddingEnd="8dp" />
+
+        <ImageButton
+            android:id="@+id/btnDeleteMessage"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/rounded_white_background"
+            android:src="@android:drawable/ic_menu_delete"
+            android:contentDescription="Eliminar mensaje"
+            android:scaleType="centerInside"
+            android:tint="#E53935" />
+    </LinearLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

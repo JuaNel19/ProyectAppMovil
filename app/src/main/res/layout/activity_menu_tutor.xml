@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
-            android:background="#FFFFFF"
+            android:background="@color/headerBackground"
             app:itemIconTint="#4F8FC0"
             app:itemTextColor="#4F8FC0"
             app:menu="@menu/menu_tutor" />
@@ -48,7 +48,7 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="#FFFFFF"
+        android:background="@color/headerBackground"
         android:fitsSystemWindows="true"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/nav_menu" />

@@ -36,12 +36,8 @@ class AppsAdapter(
             textViewPackage.text = app.packageName
             switchBlock.isChecked = app.bloqueado
 
-            // Cargar icono si existe
-            if (app.icono.isNotEmpty()) {
-                Glide.with(itemView.context)
-                    .load(app.icono)
-                    .into(imageViewIcon)
-            }
+            // Mostrar el icono real
+            imageViewIcon.setImageDrawable(app.icono)
 
             // Configurar listener del switch
             switchBlock.setOnCheckedChangeListener { _, isChecked ->
